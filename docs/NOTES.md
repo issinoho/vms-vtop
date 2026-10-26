@@ -53,3 +53,45 @@ nothing on the VMS side says which emulator it is (D6).
 
 `MONITOR DISK/OPERATION_RATE` is not a qualifier; it is `/ITEM=OPERATION_RATE`.
 `F$GETJPI("","CURPRIV")` overflows DCL's token limit for this account (beszel N17).
+
+## N6. VTOP's figures agree with MONITOR (2026-10-26, x86 and IA64)
+
+`tests/vms/t_sample.c` (VTOP's sampler and model, no terminal), two samples 3 s apart,
+then `MONITOR MODES` over the next 3 s: IA64 100% busy, kernel 67 / interrupt 22 /
+user 10 in both; x86 between 50% (one CPU in kernel) and 100%, the same in both.
+Disk op/s agree with `MONITOR DISK` (N4). The load was real: a `vim.exe` from the
+vms-vim work directory spinning in another session's ssh login on each node (x86 since
+01:01, IA64 since 01:31), which a SHOW SYSTEM diff missed at first because CUR lines
+have an extra CPU column. VTOP itself used 0.06 s of CPU in 22 s at a 2 s interval.
+
+## N7. The terminal on the nodes (2026-10-26, x86 and IA64, PTYDRIVE pseudo-terminal)
+
+- With nothing answering DSR (PTYDRIVE doesn't), the UTF-8 check times out after 1 s
+  and VTOP chooses VT and 8 colours (D6, D7). The check's answering path was tested
+  on Linux only (`tools/vtshot.py` answers both ways); on the nodes it waits for a
+  real terminal.
+- Ctrl/C and Ctrl/Y end VTOP through the channel ASTs; DCL answers straight after, and
+  Ctrl/Y at DCL gives "Interrupt" again (the CLI's Ctrl/Y and Ctrl/T are put back).
+- A REPLY to the terminal while VTOP runs shows in the status line ("Reply received on
+  X86VMS from user IAIN ... VTOP broadcast test"), its CR/LFs made spaces.
+- `SET TERMINAL/WIDTH=100/PAGE=30` from a subprocess while VTOP runs: the next sample
+  polls `DVI$_DEVBUFSIZ`/`DVI$_TT_PAGE`, and VTOP redraws the whole screen at 100x30.
+- SHOW TERMINAL after VTOP: the characteristics as before (keypad numeric, no
+  eightbit).
+- `IO$M_CTRLCAST`'s AST address needs an integer cast: `(void *)` of a function
+  pointer is `%CC-I-NONSTANDCAST` on IA64, and the build stops on any message.
+
+## N8. The terminal's real size (2026-10-26, x86 and IA64; the user's terminals)
+
+An SSH session in a large xterm window still had VMS width 80 and page 24, so VTOP
+drew 80x24 in the corner (the user's screenshot). VTOP now asks the terminal: cursor
+to 999;999, DSR 6, cursor back (ESC 7 / ESC 8); the answer is the size. VMS's settings
+win again only if they change while VTOP runs (SET TERMINAL/WIDTH); Ctrl/W asks
+again after a window resize. The logical name `VTOP$SIZE` ("132x40") sets it for a
+terminal that doesn't answer. With `VTOP$SIZE` 100x30 on an 80x24 pseudo-terminal
+(`tests/vms/test_live3.com`) VTOP drew all 100 columns and 30 rows with no wrapping
+(`IO$M_NOFORMAT` output is not wrapped at the VMS width), and left the terminal at
+80x24. Seen by the user: the VT525 and VT520 emulators answer the UTF-8 check as
+non-UTF-8 (VT mode, 8 colours) and the xterm-type terminal as UTF-8 (braille, 24-bit).
+A monochrome VT520 ignored bar cells drawn as background colour: bars are now reverse
+video in their colour, which shows on both.

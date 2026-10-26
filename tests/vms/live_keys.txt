@@ -1,0 +1,16 @@
+# PTYDRIVE script for the live test: each line types its text, then waits.
+2 symbol | vtop :== $'f$parse("[.build]vtop.exe")'\r
+9 braille | vtop /graph=braille /colour=24 /interval=1\r
+4 block | g
+4 vt | g
+3 colour256 | c
+2 interval | +
+2 quit | q
+2 after | show terminal\r
+6 detect | vtop /interval=1\r
+2 ctrly | \x19
+2 dcl | write sys$output "DCL-OK"\r
+3 ctrlc | vtop /graph=vt\r
+2 ctrlc_key | \x03
+2 dcl2 | write sys$output "DCL-OK2"\r
+2 badqual | vtop /graph=nonsense\r

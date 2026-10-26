@@ -1,0 +1,11 @@
+# PTYDRIVE script: a broadcast message and a resize while VTOP runs, then DCL's Ctrl/Y.
+2 symbol | vtop :== $'f$parse("[.build]vtop.exe")'\r
+1 tt | tt = f$trnlnm("TT")\r
+1 spawn | spawn/nowait/nolog/input=nl: pipe wait 0:0:4 ; reply/terminal='tt' "VTOP broadcast test" ; wait 0:0:4 ; set terminal/width=100/page=30 'tt'\r
+7 message | vtop /graph=vt /interval=1\r
+6 resized | \x17
+2 quit | q
+1 size | write sys$output f$getdvi("TT","DEVBUFSIZ"), " ", f$getdvi("TT","TT_PAGE")\r
+1 back | set terminal/width=80/page=24\r
+2 ctrly_dcl | \x19
+1 dcl | write sys$output "DCL-OK3"\r

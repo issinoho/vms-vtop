@@ -46,9 +46,9 @@ scan with image names costs 2-4 ms; without WORLD the caller sees only its own
 processes; disk op rates agree with MONITOR; UTF-8 and colour pass the driver.
 The disk panel shows op/s, not MB/s (N4).
 
-Exit: NOTES for each probe; the user signs off this plan and D1-D7.
+Exit: NOTES for each probe; the user signs off this plan and D1-D7. Done 2026-10-26.
 
-## Phase 1: the panels, read-only
+## Phase 1: the panels, read-only (done 2026-10-26)
 
 - Copy in vtree's screen model, renderer and keyboard; the stub platform and snapshot
   tests (`make test`).
@@ -57,7 +57,19 @@ Exit: NOTES for each probe; the user signs off this plan and D1-D7.
   messages, CTRL/C and CTRL/Y leave the terminal as it was.
 - Live test on both nodes over a pseudo-terminal (vtree's `live.sh`, `vtscreen.py`).
 
-## Phase 2: the process list and its actions
+Status 2026-10-26: done on both nodes (NOTES N6, N7). `make test` (73 core checks, 19
+app checks and 8 snapshots) passes on Linux and, through `build_vms TEST`, on both
+nodes, where the screens match Linux's. `tools/live.sh` and `test_live2.com` drive
+VTOP on a pseudo-terminal: all graph and colour modes, keys, Ctrl/C, Ctrl/Y, a
+broadcast message, a resize. `make demo` runs it on Linux with an invented system;
+`tools/vtshot.py` makes PNG screenshots of either. Still to see: VTOP from a real
+xterm and a real VT or DECterm, by the user.
+
+Exit: the user runs VTOP on both nodes from their own terminal and signs off. Done
+2026-10-26: a VT525 in colour, a monochrome VT520 and an xterm-type terminal (braille,
+24-bit colour, the whole window: N8).
+
+## Phase 2: the process list and its actions (started 2026-10-26)
 
 - Scan, CPU% and DIO/BIO rates from deltas, sort by any column, `/` filter, tree by
   owner PID, details page for one process (quotas, privileges, image, terminal).

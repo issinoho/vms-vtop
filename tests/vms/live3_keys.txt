@@ -1,0 +1,7 @@
+# PTYDRIVE script: VTOP at 100x30 by VTOP$SIZE on an 80x24 terminal: no wrapping.
+2 symbol | vtop :== $'f$parse("[.build]vtop.exe")'\r
+1 size | define/nolog vtop$size "100x30"\r
+5 big | vtop /graph=vt /interval=1\r
+2 quit | q
+1 undef | deassign vtop$size\r
+1 tt | write sys$output f$getdvi("TT","DEVBUFSIZ"), " ", f$getdvi("TT","TT_PAGE")\r

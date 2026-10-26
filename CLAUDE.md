@@ -30,6 +30,20 @@ Green-field code, not a port (D2). Copy no btop code, themes or artwork (D1).
 - **The screen goes through the core renderer**, never SMG$ output calls: SMG$ is for
   keys and broadcast trapping only (vtree D11).
 
+## Testing
+
+`make test` (Linux: core checks and screen snapshots in `tests/snap`; `make snapshots`
+rewrites them, then read every changed one). `make demo` runs VTOP on this terminal
+with an invented system. `tools/vtshot.py` runs it on a pseudo-terminal (or replays a
+PTYDRIVE transcript) and saves a PNG: look at the screens, not just the text.
+On the nodes: `tools/push.sh <node>` then `tools/vms.sh <node> dcl '@build_vms TEST'`;
+`tools/live.sh <node>` for the live test (`tests/vms/live_keys.txt`), and
+`tests/vms/test_live2.com` for broadcast, resize and Ctrl/Y. `tests/vms/t_sample.com`
+compares the sampler with MONITOR.
+
+When the nodes look busy, check SHOW SYSTEM before blaming VTOP: other sessions run
+tests there too (N6).
+
 ## OpenVMS
 
 Undefined symbols are *warnings* on VMS: check `$SEVERITY` after every LINK. x86 has

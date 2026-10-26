@@ -43,19 +43,28 @@ WORLD sees every process, GROUP the group's, otherwise only the caller's own. Th
 header says which. Actions rely on the system's own checks, with the exact status
 shown on failure.
 
-## D6. Graph characters by terminal (2026-10-26, proposed)
+## D6. Graph characters by terminal (2026-10-26, agreed with the user; detection amended)
 
 btop draws graphs in braille. Three modes: `BRAILLE` and `BLOCK` (UTF-8, for
-xterm-type terminals) and `VT` (DEC Special Graphics scan lines and ASCII, for real VTs
-and DECterm). The driver passes all of them (N5) but can't tell which emulator is on
-the other end, so: `/GRAPH=` qualifier, then the logical name `VTOP$GRAPH`, then the
-options file; default `BRAILLE` when the terminal type is not a DEC VT, else `VT`.
-(Considered: asking the terminal with DA1 or XTVERSION at start-up; it adds a timed
-read and some emulators answer neither. Could come later.)
+xterm-type terminals) and `VT` (DEC Special Graphics scan lines, reverse-video bars and
+ASCII, for real VTs and DECterm). The driver passes all of them (N5). Chosen by the
+`/GRAPH=` qualifier, else the logical name `VTOP$GRAPH`, else detected: BRAILLE on a
+UTF-8 terminal, VT otherwise.
 
-## D7. Colour palette (2026-10-26, proposed)
+Detection (amended 2026-10-26, Phase 1): the agreed rule was "not a DEC VT terminal type
+means UTF-8", but VMS has no device type for xterm-type emulators: they show as a VT
+type (from SET TERMINAL/INQUIRE or the SSH server's default) or UNKNOWN, just as a real
+VT does, so the type says nothing. Instead VTOP writes one braille character at column 1 and asks
+for the cursor position (DSR 6, which every VT and emulator answers): column 2 means
+UTF-8, column 4 means not. No answer within a second: VT. This is the standard check
+for UTF-8 terminals.
 
-btop's default theme look (dark background, green/yellow/red gradients on meters),
-written as ANSI colour by the renderer. 24-bit colour by default on non-VT terminal
-types, 256 and 16 colour on request (all three pass the driver, N5), and a monochrome
-mode for VT100-class terminals. Chosen like D6: `/COLOUR=`, `VTOP$COLOUR`, options file.
+## D7. Colour palette (2026-10-26, agreed with the user)
+
+A btop-like look of our own (no btop theme copied): terminal background, green-yellow-red
+gradients on meters and graphs, a colour per panel frame, written as ANSI colour by the
+renderer. Modes: `24` (24-bit), `256`, `8` (SGR 30-37, which DECterm shows) and `MONO`
+(bold and reverse only). Chosen by `/COLOUR=`, else `VTOP$COLOUR`, else 24 on a UTF-8
+terminal and 8 otherwise: a real VT would read the numbers in a 24-bit sequence as
+other renditions (1 bold, 4 underline, 5 blink, 7 reverse). The proposal said 16
+colours; the bright half (SGR 90-97) is not known to DECterm, so it is 8.
