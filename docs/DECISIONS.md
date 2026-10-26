@@ -68,3 +68,24 @@ renderer. Modes: `24` (24-bit), `256`, `8` (SGR 30-37, which DECterm shows) and 
 terminal and 8 otherwise: a real VT would read the numbers in a 24-bit sequence as
 other renditions (1 bold, 4 underline, 5 blink, 7 reverse). The proposal said 16
 colours; the bright half (SGR 90-97) is not known to DECterm, so it is 8.
+
+## D8. The process list and its keys (2026-10-26, Phase 2; signed off by the user at the exit)
+
+- **Scan**: one wildcard `$GETJPI` pass per sample, image names included (N1). Rows
+  are kept in PID order; rates come from the previous scan of the same PID.
+- **Columns**, shown in this order and dropped from the right of this priority list
+  when the panel is narrow: PID, Name, CPU%, St, Mem, User, Pri, CPU time, DIO/s,
+  BIO/s, Image (the rest of the width). St comes before Mem so that an 80-column
+  screen still shows SUSP. CPU% is of the whole system, so the column
+  adds up to the CPU panel's figure (btop's default; `top` uses one CPU). Mem is the
+  working set in use, (PPGCNT + GPGCNT) x 512 bytes (N2).
+- **Keys**: Up/Down/Prev/Next select; Left/Right or `<` `>` change the sort column, `r`
+  reverses it (default CPU%, highest first); `t` a tree by owner (creator) PID; `/` or
+  `f` a filter (name, user, image or PID, any case; Return keeps it, an empty one
+  clears it); `i` or Return the details (image, quotas, privileges, login time); `h`,
+  `?` or Help lists every key.
+- **Actions (D4)** are capitals so that a lowercase slip does nothing: `S` suspend, `R`
+  resume, `D` delete, `P` priority (typed, 0-31). The question box names PID, process,
+  user and image, typeahead is thrown away first, `Y` alone confirms, and the action
+  goes to that PID. VTOP refuses to suspend or delete its own process.
+- The selection follows the PID across scans and re-sorts, not the line.

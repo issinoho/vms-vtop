@@ -1,0 +1,38 @@
+# PTYDRIVE script: the process list and its actions (D4, D8), on a subprocess this test
+# creates (VPTEST1, which only waits) and on nothing else. SHOW SYSTEM checks each
+# change from outside VTOP.
+2 symbol | vtop :== $'f$parse("[.build]vtop.exe")'\r
+2 spawn | spawn/nowait/nolog/input=nl:/process=VPTEST1 wait 0:3:00\r
+6 list | vtop /graph=vt /interval=1\r
+1 filtering | /VPTEST1
+3 filtered | \r
+3 details | i
+2 nodetails | i
+# typeahead: the y typed with the S is thrown away, so the question still waits
+3 typeahead | Sy
+3 noanswer | n
+3 suspended_q | S
+4 suspended | y
+2 quit1 | q
+2 check_susp | @[.tests.vms]vptest_show\r
+5 list2 | vtop /graph=vt /interval=1\r
+3 filtered2 | /VPTEST1\r
+3 resumed_q | R
+4 resumed | y
+2 prio_q | P
+2 prio_typed | 2\r
+4 prio | y
+2 quit2 | q
+2 check_prio | @[.tests.vms]vptest_show\r
+5 list3 | vtop /graph=vt /interval=1\r
+3 filtered3 | /VPTEST1\r
+3 delete_no_q | D
+3 delete_no | n
+3 delete_q | D
+4 deleted | y
+# VTOP's own process (image VTOP): refused before any question
+1 refilter | /\x15vtop\r
+3 self | D
+2 quit | q
+2 gone | @[.tests.vms]vptest_show\r
+1 dcl | write sys$output "DCL-OK4"\r

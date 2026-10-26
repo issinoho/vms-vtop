@@ -1,6 +1,6 @@
-# PTYDRIVE script: VTOP's own CPU time over 20 s.
+# PTYDRIVE script: VTOP's own CPU time over 20 s at the shortest interval (the worst case).
 2 symbol | vtop :== $'f$parse("[.build]vtop.exe")'\r
 2 before | show process/accounting\r
-20 run | vtop /graph=vt /interval=2\r
+20 run | vtop /graph=vt /interval=1\r
 2 quit | q
 2 after | show process/accounting\r

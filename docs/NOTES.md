@@ -95,3 +95,28 @@ terminal that doesn't answer. With `VTOP$SIZE` 100x30 on an 80x24 pseudo-termina
 non-UTF-8 (VT mode, 8 colours) and the xterm-type terminal as UTF-8 (braille, 24-bit).
 A monochrome VT520 ignored bar cells drawn as background colour: bars are now reverse
 video in their colour, which shows on both.
+
+## N9. The process list and its actions on the nodes (2026-10-26, x86 and IA64)
+
+`tests/vms/test_live4.com` (`live4_keys.txt`) on an 80x24 pseudo-terminal. It spawns
+VPTEST1 (a subprocess that only waits) and acts on nothing else (CLAUDE.md):
+- The list shows every process with WORLD (44 on x86, 47 on IA64); the filter
+  "VPTEST1" leaves one; its details read back (UIC, account, "none (at DCL level)"
+  as the image, mode network, owner PID, login time, quotas).
+- "Sy" typed together: the `y` is thrown away with the typeahead and the question
+  still waits; the `n` that follows answers it ("nothing done").
+- Suspend, then outside VTOP `F$GETJPI`: state SUSP. Resume: LEF. Priority 2: PRIB 2,
+  while PRI (the current priority, as in SHOW SYSTEM's column) stays 6 for a while:
+  VMS's boost after the wait, not a failure. Delete: the process is gone.
+- Delete answered `n` leaves it alone; D on VTOP's own process (image VTOP) is
+  refused before any question.
+- A suspended process still answers the scan (`JPI$M_IGNORE_TARGET_STATUS`), so it
+  stays in the list as SUSP and can be resumed.
+- `$SETPRI`, `$SUSPND`, `$RESUME` and `$DELPRC` (the `__NEW_STARLET` prototypes, the
+  same on both compilers) need no privilege for the caller's own subprocess.
+
+VTOP's own cost with the process scan, `tests/vms/test_cpu.com` (20 s at
+`/INTERVAL=1`, the worst case): x86 0.26 s of CPU (about 1.2% of one CPU; 0.06 s at
+2 s before the scan, N6). IA64's accounting showed no change from 0.01 s although
+VTOP drew for the whole 20 s: its short bursts fall between the clock ticks that
+charge CPU time, so take the x86 figure.

@@ -69,11 +69,20 @@ Exit: the user runs VTOP on both nodes from their own terminal and signs off. Do
 2026-10-26: a VT525 in colour, a monochrome VT520 and an xterm-type terminal (braille,
 24-bit colour, the whole window: N8).
 
-## Phase 2: the process list and its actions (started 2026-10-26)
+## Phase 2: the process list and its actions (done 2026-10-26)
 
 - Scan, CPU% and DIO/BIO rates from deltas, sort by any column, `/` filter, tree by
   owner PID, details page for one process (quotas, privileges, image, terminal).
 - Actions (D4): suspend, resume, delete, set priority, with the confirmation rules.
+
+Status 2026-10-26: built to D8 on both nodes (NOTES N9). `make test` (121 core checks,
+55 app checks, 15 snapshots) passes on Linux and through `build_vms TEST` on both
+nodes. `test_live4.com` drives the list, filter, details and every action on a
+subprocess it creates, and checks each change with `F$GETJPI` from outside VTOP.
+The user tried it from their own terminal and signed off D8 on 2026-10-26.
+
+Exit: the user tries the list and the actions from their own terminal (on a process
+of their own) and signs off D8.
 
 ## Phase 3: VMS panels and options
 

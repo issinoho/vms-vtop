@@ -6,6 +6,7 @@
 #include "vp_types.h"
 #include "vp_screen.h"
 #include "vp_model.h"
+#include "vp_procs.h"
 
 #define VP_VERSION "0.1.0"
 #define VP_MIN_ROWS 20
@@ -19,6 +20,9 @@ typedef struct {
     vp_rect cpu, mem, net, proc;
     int status_row;
 } vp_layout;
+
+/* what the keyboard is typing into */
+enum { VP_IN_NONE, VP_IN_FILTER, VP_IN_PRIO, VP_IN_CONFIRM };
 
 typedef struct {
     vp_screen scr;
@@ -34,6 +38,33 @@ typedef struct {
     int repaint;                /* the terminal should be redrawn from scratch */
     int measure;                /* ask the terminal its size again (Ctrl/W) */
     int resample;               /* take a sample now (the interval changed) */
+    int help;                   /* the key list is showing */
+
+    /* the process list (D8) */
+    vp_plist procs;
+    vp_pview view;
+    int sort, reverse, tree;
+    char filter[32];
+    uint32_t sel_pid;           /* the selection follows the PID, not the line */
+    int sel, top;               /* the selected line, the first line shown */
+    int list_rows;              /* lines the list had at the last draw (Prev, Next) */
+    int input;                  /* VP_IN_* */
+    char field[8];              /* the priority being typed */
+
+    /* a question about one process (D4): asked about ask_proc as it was shown, and
+       done by the main loop to ask_proc.pid when act is set */
+    int ask_act, ask_arg;
+    vp_proc ask_proc;
+    int act;
+    int flush;                  /* throw typeahead away now, a question is coming */
+
+    /* the details page: the main loop fetches detail_pid when detail_want is set */
+    int detail;
+    uint32_t detail_pid;
+    int detail_want;
+    int det_ok;
+    vp_proc_detail det;
+    char det_err[160];
 } vp_app;
 
 int  vp_app_init(vp_app *a, int rows, int cols, const vp_identity *id);  /* 0: no memory */
@@ -42,6 +73,13 @@ int  vp_app_resize(vp_app *a, int rows, int cols);                       /* 0: n
 void vp_app_sample(vp_app *a, const vp_sample *s);
 void vp_app_key(vp_app *a, int key);
 void vp_app_message(vp_app *a, const char *text);
+/* a process scan (n processes) taken at ms; 0: no memory */
+int  vp_app_procs(vp_app *a, const vp_proc *p, int n, const vp_scan *scan, uint64_t ms);
+/* the list as the next draw shows it, and the selection on it; drawing does this too */
+void vp_app_update_view(vp_app *a);
+void vp_app_detail(vp_app *a, int ok, const vp_proc_detail *d, const char *err);
+/* the result of an action the main loop did: ok, or the system's message */
+void vp_app_action_done(vp_app *a, int ok, const char *msg);
 void vp_app_draw(vp_app *a);
 
 void vp_layout_for(int rows, int cols, vp_layout *l);

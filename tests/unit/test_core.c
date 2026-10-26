@@ -1,5 +1,5 @@
 /* test_core.c - unit checks of the core: formatting, the screen model, the
-   renderer, the model's arithmetic, graphs and meters. */
+   renderer, the model's arithmetic, graphs and meters, the process list. */
 #include <stdio.h>
 #include <string.h>
 #include "vp_types.h"
@@ -9,6 +9,7 @@
 #include "vp_term.h"
 #include "vp_model.h"
 #include "vp_graph.h"
+#include "vp_procs.h"
 
 static int checks, fails;
 #define CHECK(c) do { checks++; if (!(c)) { fails++; printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #c); } } while (0)
@@ -228,6 +229,109 @@ static void test_graph(void)
     vp_screen_free(&s);
 }
 
+
+static vp_proc mk(uint32_t pid, uint32_t owner, const char *name, const char *user,
+                  uint32_t cpu, uint64_t mem)
+{
+    vp_proc p;
+    memset(&p, 0, sizeof p);
+    p.pid = pid;
+    p.owner = owner;
+    strcpy(p.name, name);
+    strcpy(p.user, user);
+    p.cputim = cpu;
+    p.mem = mem;
+    p.state = 5;
+    return p;
+}
+
+static void test_procs(void)
+{
+    char b[64];
+    vp_plist l;
+    vp_pview v;
+    vp_proc p[6];
+    vp_scan sc;
+    int k;
+
+    vp_image_short(b, sizeof b, "DKA0:[SYS0.SYSCOMMON.][SYSEXE]VIM.EXE;1"); CHECK_STR(b, "VIM");
+    vp_image_short(b, sizeof b, "$1$DGA1:<TOOLS>CC.EXE");                    CHECK_STR(b, "CC");
+    vp_image_short(b, sizeof b, "");                                         CHECK_STR(b, "");
+    vp_fmt_cputime(b, sizeof b, 1976130);      CHECK_STR(b, "05:29:21.30");    /* N2 */
+    vp_fmt_cputime(b, sizeof b, 0);            CHECK_STR(b, "00:00:00.00");
+    vp_fmt_cputime(b, sizeof b, 12u * 8640000u + 360000u); CHECK_STR(b, "12 01:00:00");
+    vp_fmt_uic(b, sizeof b, (0100u << 16) | 1u); CHECK_STR(b, "[100,1]");
+    CHECK_STR(vp_state_name(14), "CUR");
+    CHECK_STR(vp_state_name(9), "SUSP");
+    CHECK_STR(vp_state_name(99), "?");
+
+    /* rates: 2 CPUs, 2 s apart; 100 ticks = 1 s of CPU = 25% of the system */
+    vp_plist_init(&l);
+    vp_pview_init(&v);
+    memset(&sc, 0, sizeof sc);
+    p[0] = mk(0x30, 0, "DCL", "IAIN", 1000, 1u << 20);
+    p[1] = mk(0x10, 0, "SWAPPER", "SYSTEM", 0, 0);
+    p[2] = mk(0x31, 0x30, "IAIN_1", "IAIN", 5000, 9u << 20);
+    p[3] = mk(0x32, 0x30, "IAIN_2", "IAIN", 7000, 2u << 20);
+    p[4] = mk(0x33, 0x32, "IAIN_3", "IAIN", 100, 3u << 20);
+    p[2].dirio = 0xFFFFFFF0u;
+    CHECK(vp_plist_update(&l, p, 5, &sc, 1000, 2));
+    CHECK(l.n == 5 && l.row[0].p.pid == 0x10 && l.row[4].p.pid == 0x33);    /* PID order */
+    CHECK(l.row[0].cpu < 0);                                                /* not yet */
+    p[2].cputim += 100;
+    p[2].dirio += 0x20;                 /* across the 32-bit wrap: 32 in 2 s */
+    p[3].cputim += 20;
+    CHECK(vp_plist_update(&l, p, 5, &sc, 3000, 2));
+    k = vp_plist_find(&l, 0x31);
+    CHECK(k >= 0 && l.row[k].cpu > 24.9f && l.row[k].cpu < 25.1f);
+    CHECK(l.row[k].dio > 15.9f && l.row[k].dio < 16.1f);
+    CHECK(vp_plist_find(&l, 0x99) < 0);
+
+    /* sorted by CPU%, highest first; then reversed; ties by PID */
+    CHECK(vp_pview_build(&v, &l, VP_S_CPU, 0, 0, ""));
+    CHECK(v.n == 5 && l.row[v.line[0].row].p.pid == 0x31 && l.row[v.line[1].row].p.pid == 0x32);
+    CHECK(l.row[v.line[2].row].p.pid == 0x10);                              /* 0% ties: PID */
+    CHECK(vp_pview_build(&v, &l, VP_S_CPU, 1, 0, ""));
+    CHECK(l.row[v.line[4].row].p.pid == 0x31);
+    CHECK(vp_pview_build(&v, &l, VP_S_NAME, 0, 0, ""));
+    CHECK(l.row[v.line[0].row].p.pid == 0x30);                              /* DCL first */
+    CHECK(vp_sort_descending(VP_S_MEM, 0) && !vp_sort_descending(VP_S_NAME, 0)
+          && vp_sort_descending(VP_S_NAME, 1));
+
+    /* the filter: name, user or PID, any case */
+    CHECK(vp_pview_build(&v, &l, VP_S_PID, 0, 0, "iain_"));
+    CHECK(v.n == 3);
+    CHECK(vp_pview_build(&v, &l, VP_S_PID, 0, 0, "system"));
+    CHECK(v.n == 1 && l.row[v.line[0].row].p.pid == 0x10);
+    CHECK(vp_pview_build(&v, &l, VP_S_PID, 0, 0, "00000033"));
+    CHECK(v.n == 1);
+    CHECK(vp_pview_find(&v, &l, 0x33) == 0 && vp_pview_find(&v, &l, 0x30) < 0);
+
+    /* tree by owner, by PID: SWAPPER, DCL ├ IAIN_1, └ IAIN_2 └ IAIN_3 */
+    CHECK(vp_pview_build(&v, &l, VP_S_PID, 0, 1, ""));
+    CHECK(v.n == 5);
+    CHECK(l.row[v.line[0].row].p.pid == 0x10 && v.line[0].depth == 0);
+    CHECK(l.row[v.line[1].row].p.pid == 0x30 && v.line[1].depth == 0);
+    CHECK(l.row[v.line[2].row].p.pid == 0x31 && v.line[2].depth == 1 && !v.line[2].last);
+    CHECK(l.row[v.line[3].row].p.pid == 0x32 && v.line[3].depth == 1 && v.line[3].last);
+    CHECK(l.row[v.line[4].row].p.pid == 0x33 && v.line[4].depth == 2 && v.line[4].last);
+    CHECK(v.line[4].more == 0);         /* IAIN_2 was last: no │ beside IAIN_3 */
+    /* filtered: IAIN_3's parent hidden, so it is a root */
+    CHECK(vp_pview_build(&v, &l, VP_S_PID, 0, 1, "IAIN_3"));
+    CHECK(v.n == 1 && v.line[0].depth == 0);
+    /* a loop of owners (PID reuse) still shows every process once */
+    p[0].owner = 0x33;
+    CHECK(vp_plist_update(&l, p, 5, &sc, 5000, 2));
+    CHECK(vp_pview_build(&v, &l, VP_S_PID, 0, 1, ""));
+    CHECK(v.n == 5);
+    /* a process gone, an empty scan */
+    CHECK(vp_plist_update(&l, p, 2, &sc, 7000, 2) && l.n == 2);
+    CHECK(vp_plist_update(&l, p, 0, &sc, 9000, 2) && l.n == 0);
+    CHECK(vp_pview_build(&v, &l, VP_S_CPU, 0, 1, "") && v.n == 0);
+    vp_pview_free(&v);
+    vp_plist_free(&l);
+}
+
 int main(void)
 {
     test_format();
@@ -235,6 +339,7 @@ int main(void)
     test_term();
     test_model();
     test_graph();
+    test_procs();
     printf("test_core: %d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
 }

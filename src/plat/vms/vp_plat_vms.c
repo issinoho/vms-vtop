@@ -11,8 +11,12 @@
      $GETSYI   identity, memory size, page and swap files, boot time
      $GETRMI   CPU mode times per CPU (RMI$_MODES), free/modified lists, processes
      $GETDVI   mounted disks: size, free, errors, state, operation count (N4)
+     $GETJPI   the process list and one process's details (N1, N2)
      $QIO      LAN read-counters on each LAN device's unit 0 (beszel N12-13);
                once a 32-bit counter sticks at 4 GiB, LANCP's 64-bit figures
+
+   Process actions ($SUSPND, $RESUME, $DELPRC, $SETPRI) use the caller's own
+   privileges, and the system's own checks decide (D4, D5).
 
    Built with SYS$LIB_C.TLB for NMADEF. */
 #include <stdio.h>
@@ -25,6 +29,8 @@
 #include <dvsdef.h>
 #include <efndef.h>
 #include <iodef.h>
+#include <jpidef.h>
+#include <prvdef.h>
 #include <libclidef.h>
 #include <lnmdef.h>
 #include <nmadef.h>
@@ -39,6 +45,7 @@
 
 #include "vp_platform.h"
 #include "vp_util.h"
+#include "vp_procs.h"
 
 /* POSIX, in the C RTL, but hidden by VSI C under /STANDARD=C99 (beszel N26) */
 FILE *popen(const char *command, const char *mode);
@@ -773,4 +780,259 @@ int vpp_sample(vp_sample *s)
     }
     s->ms = vpp_now_ms();
     return s->ncpu > 0;
+}
+
+/* ---------- processes ---------- */
+
+static void set_item(struct item *it, int code, void *buf, unsigned short len, unsigned short *rl)
+{
+    it->len = len;
+    it->code = (unsigned short) code;
+    it->buf = buf;
+    it->retlen = rl;
+}
+
+/* the system's text for a status, "%SYSTEM-F-NOPRIV, insufficient privilege ..." */
+static void status_text(unsigned int st, char *out, int size)
+{
+    struct dsc$descriptor_s d;
+    unsigned short len = 0;
+    char buf[256];
+    dsc(&d, buf, sizeof buf - 1);
+    if (sys$getmsg(st, &len, &d, 15, 0) & 1) {
+        buf[len] = '\0';
+        vp_strlcpy(out, buf, (size_t) size);
+    } else {
+        snprintf(out, (size_t) size, "status %%X%08X", st);
+    }
+}
+
+static unsigned int get_flags(void)
+{
+    unsigned int f = 0;
+#ifdef JPI$M_NO_TARGET_INSWAP
+    f |= JPI$M_NO_TARGET_INSWAP;
+#endif
+#ifdef JPI$M_IGNORE_TARGET_STATUS
+    f |= JPI$M_IGNORE_TARGET_STATUS;          /* a suspended process answers too */
+#endif
+    return f;
+}
+
+static uint32_t self_pid;
+static int self_scope = -1;
+
+/* our PID, and what our privileges let $GETJPI show (D5) */
+static void self_info(void)
+{
+    unsigned int pid = 0, priv[2] = { 0, 0 };
+    struct item it[3];
+    struct iosb iosb;
+    memset(it, 0, sizeof it);
+    set_item(&it[0], JPI$_PID, &pid, 4, 0);
+    set_item(&it[1], JPI$_CURPRIV, priv, 8, 0);
+    if ((sys$getjpiw(EFN$C_ENF, 0, 0, it, (void *) &iosb, 0, 0) & 1) && (iosb.st & 1)) {
+        self_pid = pid;
+        self_scope = priv[0] & PRV$M_WORLD ? VP_SCOPE_WORLD
+                   : priv[0] & PRV$M_GROUP ? VP_SCOPE_GROUP : VP_SCOPE_OWN;
+    }
+}
+
+static void fix_text(char *buf, unsigned short len, size_t cap)
+{
+    buf[len < cap ? len : cap - 1] = '\0';
+    trim(buf);
+}
+
+int vpp_procs(vp_proc *p, int max, vp_scan *info)
+{
+    unsigned int ctx = 0xFFFFFFFF, flags = get_flags(), st;
+    int n = 0, other = 0;
+    struct {
+        unsigned int pid, owner, uic, state, pri, prib, mode, kt, cputim, ppg, gpg, faults,
+                     dirio, bufio;
+        char prcnam[16], user[13], term[9], image[256];
+        unsigned short prcnam_l, user_l, term_l, image_l;
+    } r;
+    struct item it[22];
+    struct iosb iosb;
+    memset(info, 0, sizeof *info);
+    self_info();
+    info->self = self_pid;
+    info->scope = self_scope < 0 ? VP_SCOPE_OWN : self_scope;
+    for (;;) {
+        int k = 0;
+        memset(&r, 0, sizeof r);
+        memset(it, 0, sizeof it);
+#ifdef JPI$_GETJPI_CONTROL_FLAGS
+        set_item(&it[k++], JPI$_GETJPI_CONTROL_FLAGS, &flags, 4, 0);
+#endif
+        set_item(&it[k++], JPI$_PID, &r.pid, 4, 0);
+        set_item(&it[k++], JPI$_OWNER, &r.owner, 4, 0);
+        set_item(&it[k++], JPI$_UIC, &r.uic, 4, 0);
+        set_item(&it[k++], JPI$_STATE, &r.state, 4, 0);
+        set_item(&it[k++], JPI$_PRI, &r.pri, 4, 0);
+        set_item(&it[k++], JPI$_PRIB, &r.prib, 4, 0);
+        set_item(&it[k++], JPI$_MODE, &r.mode, 4, 0);
+        set_item(&it[k++], JPI$_KT_COUNT, &r.kt, 4, 0);
+        set_item(&it[k++], JPI$_CPUTIM, &r.cputim, 4, 0);
+        set_item(&it[k++], JPI$_PPGCNT, &r.ppg, 4, 0);
+        set_item(&it[k++], JPI$_GPGCNT, &r.gpg, 4, 0);
+        set_item(&it[k++], JPI$_PAGEFLTS, &r.faults, 4, 0);
+        set_item(&it[k++], JPI$_DIRIO, &r.dirio, 4, 0);
+        set_item(&it[k++], JPI$_BUFIO, &r.bufio, 4, 0);
+        set_item(&it[k++], JPI$_PRCNAM, r.prcnam, 15, &r.prcnam_l);
+        set_item(&it[k++], JPI$_USERNAME, r.user, 12, &r.user_l);
+        set_item(&it[k++], JPI$_TERMINAL, r.term, 8, &r.term_l);
+        set_item(&it[k++], JPI$_IMAGNAME, r.image, 255, &r.image_l);
+        st = sys$getjpiw(EFN$C_ENF, &ctx, 0, it, (void *) &iosb, 0, 0);
+        if (st & 1) st = iosb.st;
+        if (st == SS$_NOMOREPROC) break;
+        if (st == SS$_NOPRIV) { info->hidden++; continue; }
+        if (st == SS$_NONEXPR || st == SS$_SUSPENDED) continue;
+        if (!(st & 1)) { if (++other > 50) break; continue; }
+        if (n < max) {
+            vp_proc *v = &p[n];
+            memset(v, 0, sizeof *v);
+            v->pid = r.pid;
+            v->owner = r.owner;
+            v->uic = r.uic;
+            v->state = (int) r.state;
+            v->pri = (int) r.pri;
+            v->prib = (int) r.prib;
+            v->mode = (int) r.mode;
+            v->threads = r.kt ? (int) r.kt : 1;
+            v->cputim = r.cputim;
+            v->mem = ((uint64_t) r.ppg + r.gpg) * 512u;     /* pagelets (N2) */
+            v->faults = r.faults;
+            v->dirio = r.dirio;
+            v->bufio = r.bufio;
+            fix_text(r.prcnam, r.prcnam_l, sizeof r.prcnam);
+            fix_text(r.user, r.user_l, sizeof r.user);
+            fix_text(r.term, r.term_l, sizeof r.term);
+            fix_text(r.image, r.image_l, sizeof r.image);
+            vp_strlcpy(v->name, r.prcnam, sizeof v->name);
+            vp_strlcpy(v->user, r.user, sizeof v->user);
+            vp_strlcpy(v->term, r.term, sizeof v->term);
+            vp_image_short(v->image, sizeof v->image, r.image);
+        }
+        n++;
+    }
+    info->total = n;
+    if (n == 0 && other) return -1;
+    return n < max ? n : max;
+}
+
+/* privilege bits in their standard order (PRVDEF) */
+static const char *priv_names[] = {
+    "CMKRNL", "CMEXEC", "SYSNAM", "GRPNAM", "ALLSPOOL", "IMPERSONATE", "DIAGNOSE",
+    "LOG_IO", "GROUP", "NOACNT", "PRMCEB", "PRMMBX", "PSWAPM", "ALTPRI", "SETPRV",
+    "TMPMBX", "WORLD", "MOUNT", "OPER", "EXQUOTA", "NETMBX", "VOLPRO", "PHY_IO",
+    "BUGCHK", "PRMGBL", "SYSGBL", "PFNMAP", "SHMEM", "SYSPRV", "BYPASS", "SYSLCK",
+    "SHARE", "UPGRADE", "DOWNGRADE", "GRPPRV", "READALL", "IMPORT", "AUDIT", "SECURITY"
+};
+
+int vpp_proc_detail(uint32_t pid, vp_proc_detail *d, char *err, int errsize)
+{
+    static const struct { const char *name; int lim, cnt, bytes, remaining; } qs[] = {
+        { "BYTLM", JPI$_BYTLM, JPI$_BYTCNT, 1, 1 },
+        { "DIOLM", JPI$_DIOLM, JPI$_DIOCNT, 0, 1 },
+        { "BIOLM", JPI$_BIOLM, JPI$_BIOCNT, 0, 1 },
+        { "ASTLM", JPI$_ASTLM, JPI$_ASTCNT, 0, 1 },
+        { "ENQLM", JPI$_ENQLM, JPI$_ENQCNT, 0, 1 },
+        { "FILLM", JPI$_FILLM, JPI$_FILCNT, 0, 1 },
+        { "PGFLQUOTA", JPI$_PGFLQUOTA, JPI$_PAGFILCNT, 2, 1 },  /* pagelets */
+        { "PRCLM", JPI$_PRCLM, JPI$_PRCCNT, 0, 0 },             /* PRCCNT: in use */
+        { "TQLM", JPI$_TQLM, JPI$_TQCNT, 0, 1 },
+    };
+    enum { NQ = sizeof qs / sizeof qs[0] };
+    unsigned int pidv = pid, flags = get_flags(), st, priv[2] = { 0, 0 };
+    unsigned int lim[NQ], cnt[NQ], wss = 0, wsq = 0, wse = 0;
+    unsigned short image_l = 0, acct_l = 0;
+    uint64_t login = 0;
+    char acct[9];
+    struct item it[40];
+    struct iosb iosb;
+    int k = 0, i;
+    memset(d, 0, sizeof *d);
+    memset(it, 0, sizeof it);
+    memset(lim, 0, sizeof lim);
+    memset(cnt, 0, sizeof cnt);
+#ifdef JPI$_GETJPI_CONTROL_FLAGS
+    set_item(&it[k++], JPI$_GETJPI_CONTROL_FLAGS, &flags, 4, 0);
+#endif
+    set_item(&it[k++], JPI$_IMAGNAME, d->image, sizeof d->image - 1, &image_l);
+    set_item(&it[k++], JPI$_ACCOUNT, acct, 8, &acct_l);
+    set_item(&it[k++], JPI$_LOGINTIM, &login, 8, 0);
+    set_item(&it[k++], JPI$_CURPRIV, priv, 8, 0);
+    set_item(&it[k++], JPI$_WSSIZE, &wss, 4, 0);
+    set_item(&it[k++], JPI$_WSQUOTA, &wsq, 4, 0);
+    set_item(&it[k++], JPI$_WSEXTENT, &wse, 4, 0);
+    for (i = 0; i < NQ; i++) {
+        set_item(&it[k++], qs[i].lim, &lim[i], 4, 0);
+        set_item(&it[k++], qs[i].cnt, &cnt[i], 4, 0);
+    }
+    st = sys$getjpiw(EFN$C_ENF, &pidv, 0, it, (void *) &iosb, 0, 0);
+    if (st & 1) st = iosb.st;
+    if (!(st & 1)) { status_text(st, err, errsize); return 0; }
+    d->pid = pid;
+    fix_text(d->image, image_l, sizeof d->image);
+    fix_text(acct, acct_l, sizeof acct);
+    vp_strlcpy(d->account, acct, sizeof d->account);
+    if (login) {
+        struct dsc$descriptor_s td;
+        unsigned short tl = 0;
+        char tb[32];
+        dsc(&td, tb, 23);
+        if (sys$asctim(&tl, &td, (void *) &login, 0) & 1) {
+            tb[tl] = '\0';
+            trim(tb);
+            vp_strlcpy(d->login, tb, sizeof d->login);
+        }
+    }
+    if (!d->login[0]) vp_strlcpy(d->login, "-", sizeof d->login);
+    for (i = 0; i < (int) (sizeof priv_names / sizeof priv_names[0]); i++)
+        if (priv[i / 32] & (1u << (i % 32))) {
+            if (d->privs[0]) strncat(d->privs, " ", sizeof d->privs - strlen(d->privs) - 1);
+            strncat(d->privs, priv_names[i], sizeof d->privs - strlen(d->privs) - 1);
+        }
+    d->wssize = wss * 512u;
+    d->wsquota = wsq * 512u;
+    d->wsextent = wse * 512u;
+    for (i = 0; i < NQ && d->nquota < (int) (sizeof d->quota / sizeof d->quota[0]); i++) {
+        vp_quota *q = &d->quota[d->nquota++];
+        uint32_t used = qs[i].remaining ? (cnt[i] <= lim[i] ? lim[i] - cnt[i] : 0) : cnt[i];
+        unsigned int scale = qs[i].bytes == 2 ? 512u : 1u;
+        vp_strlcpy(q->name, qs[i].name, sizeof q->name);
+        q->limit = lim[i] * scale;
+        q->used = used * scale;
+        q->bytes = qs[i].bytes != 0;
+    }
+    return 1;
+}
+
+int vpp_action(int act, uint32_t pid, int arg, char *msg, int msgsize)
+{
+    unsigned int p = pid, st, prev = 0;
+    msg[0] = '\0';
+    switch (act) {
+    case VP_ACT_SUSPEND: st = sys$suspnd(&p, 0, 0); break;
+    case VP_ACT_RESUME: st = sys$resume(&p, 0); break;
+    case VP_ACT_DELETE: st = sys$delprc(&p, 0); break;
+    case VP_ACT_PRIORITY:
+        if (arg < 0 || arg > 31) { vp_strlcpy(msg, "a priority is 0 to 31", (size_t) msgsize); return 0; }
+        st = sys$setpri(&p, 0, (unsigned int) arg, &prev, 0, 0);
+        break;
+    default:
+        vp_strlcpy(msg, "no such action", (size_t) msgsize);
+        return 0;
+    }
+    if (!(st & 1)) { status_text(st, msg, msgsize); return 0; }
+    return 1;
+}
+
+void vpp_flush_keys(void)
+{
+    int n = 0;
+    while (started && n++ < 512 && vpp_key(0) != VK_TIMEOUT) ;
 }

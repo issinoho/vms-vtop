@@ -38,7 +38,9 @@ with an invented system. `tools/vtshot.py` runs it on a pseudo-terminal (or repl
 PTYDRIVE transcript) and saves a PNG: look at the screens, not just the text.
 On the nodes: `tools/push.sh <node>` then `tools/vms.sh <node> dcl '@build_vms TEST'`;
 `tools/live.sh <node>` for the live test (`tests/vms/live_keys.txt`), and
-`tests/vms/test_live2.com` for broadcast, resize and Ctrl/Y. `tests/vms/t_sample.com`
+`tests/vms/test_live2.com` for broadcast, resize and Ctrl/Y, `test_live4.com` for the
+process list and its actions (on a subprocess it spawns, VPTEST1), `test_cpu.com` for
+VTOP's own CPU time. `tests/vms/t_sample.com`
 compares the sampler with MONITOR.
 
 When the nodes look busy, check SHOW SYSTEM before blaming VTOP: other sessions run

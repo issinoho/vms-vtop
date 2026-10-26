@@ -11,6 +11,30 @@
 #include "vp_util.h"
 
 static vp_app app;
+static vp_proc *pbuf;
+static int pcap;
+
+/* a process scan into the app, with room made when the system has more */
+static void scan_procs(void)
+{
+    vp_scan info;
+    int n, tries;
+    for (tries = 0; tries < 2; tries++) {
+        if (!pbuf) {
+            pcap = pcap ? pcap : 256;
+            pbuf = (vp_proc *) malloc((size_t) pcap * sizeof *pbuf);
+            if (!pbuf) return;
+        }
+        memset(&info, 0, sizeof info);
+        n = vpp_procs(pbuf, pcap, &info);
+        if (n < 0) return;
+        if (info.total <= pcap || tries) break;
+        free(pbuf);
+        pbuf = 0;
+        pcap = info.total + 64;
+    }
+    vp_app_procs(&app, pbuf, n, &info, vpp_now_ms());
+}
 
 static int value_of(const char *arg, const char *word, size_t min, const char **val)
 {
@@ -81,15 +105,34 @@ int main(int argc, char **argv)
 
     /* two samples close together, so the first screen already has figures */
     if (vpp_sample(&sample)) vp_app_sample(&app, &sample);
+    scan_procs();
     vpp_key(250);
     next = vpp_now_ms();
     while (!app.quit) {
         char msg[256];
         uint64_t now = vpp_now_ms();
+        int sampled = 0;
         if (now >= next || app.resample) {
             if (vpp_sample(&sample)) vp_app_sample(&app, &sample);
+            scan_procs();
+            sampled = 1;
             app.resample = 0;
             next = now + (uint64_t) app.interval * 1000u;
+        }
+        if (app.act) {
+            /* confirmed (D4): to the PID the question showed */
+            int ok = vpp_action(app.act, app.ask_proc.pid, app.ask_arg, msg, sizeof msg);
+            app.act = 0;
+            vp_app_action_done(&app, ok, msg);
+            scan_procs();
+        }
+        if (app.flush) { vpp_flush_keys(); app.flush = 0; }
+        vp_app_update_view(&app);
+        if (app.detail && app.detail_pid && (app.detail_want || sampled)) {
+            vp_proc_detail d;
+            char err[160];
+            err[0] = '\0';
+            vp_app_detail(&app, vpp_proc_detail(app.detail_pid, &d, err, sizeof err), &d, err);
         }
         while (vpp_broadcast(msg, sizeof msg)) vp_app_message(&app, msg);
         if (app.measure) { vpp_measure(); app.measure = 0; }
@@ -110,5 +153,6 @@ int main(int argc, char **argv)
     }
     vpp_stop();
     vp_app_free(&app);
+    free(pbuf);
     return VP_EXIT_OK;
 }

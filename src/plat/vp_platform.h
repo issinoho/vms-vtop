@@ -37,6 +37,15 @@ int  vpp_broadcast(char *buf, int size);
 uint64_t vpp_now_ms(void);
 int  vpp_identity(vp_identity *id);
 int  vpp_sample(vp_sample *s);          /* 0: couldn't read the CPU figures */
+/* Every process the caller may see (D5): at most max into p, in any order. info->total
+   says how many there were, so the caller can make room. Returns the number filled,
+   or -1 if the scan failed. */
+int  vpp_procs(vp_proc *p, int max, vp_scan *info);
+/* one process's details; 0 with the system's message in err */
+int  vpp_proc_detail(uint32_t pid, vp_proc_detail *d, char *err, int errsize);
+/* VP_ACT_* on pid (arg: the priority); 1 done, else 0 with the system's message */
+int  vpp_action(int act, uint32_t pid, int arg, char *msg, int msgsize);
+void vpp_flush_keys(void);              /* throw typeahead away, before a question (D4) */
 /* a logical name (VTOP$GRAPH) or environment variable; 0 if not defined */
 int  vpp_option(const char *name, char *buf, int size);
 
