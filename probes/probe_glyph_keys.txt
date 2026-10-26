@@ -1,0 +1,4 @@
+# PTYDRIVE script for probe_glyph: run it on the pseudo-terminal, then capture.
+3 glyph | run probe_glyph\r
+2 eightbit | set terminal/eightbit\r
+3 glyph8 | run probe_glyph\r
