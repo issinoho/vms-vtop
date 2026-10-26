@@ -100,7 +100,13 @@ stub only (`make demo` shows them).
 Exit: the user tries `v` and `w` from their own terminal and signs off D9 and D10.
 Signed off by the user 2026-10-26.
 
-## Phase 4: kit and release
+## Phase 4: kit and release (started 2026-10-26)
 
 - PCSI kit ISSINOHO VTOP, VTOP$STARTUP.COM, VTOP$SETUP.COM (defines the command), an
   install test on both nodes; tag v0.1.0, GitHub release, family site entry.
+
+Status 2026-10-26: `tools/kit.sh` builds ISSINOHO-X86VMS-VTOP-T0001-0-1.PCSI and
+ISSINOHO-I64VMS-VTOP-T0001-0-1.PCSI (after vms-vtree's kit: VTOP$ROOT, VTOP, the
+setup procedure, README.VMS). README with a banner from the x86 node (N12). Installed
+on both nodes with the user's agreement and left installed (N13). Next: tag v0.1.0,
+the GitHub release and the family site entry, each with the user's agreement.

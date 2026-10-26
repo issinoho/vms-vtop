@@ -162,3 +162,32 @@ at VPTEST.INI in the work directory:
 Cost, `test_cpu.com cpu5_keys.txt` (20 s at `/INTERVAL=1` with the vms panel): x86
 VTOP 0.13 s of CPU, the QUEUE_MANAGER process one 10 ms tick on each node. IA64's
 accounting again shows no change for VTOP (N9).
+
+## N12. PTYDRIVE's limits, seen making the README banner (2026-10-26, x86)
+
+`tests/vms/banner_keys.txt` runs VTOP at 132x40 in braille and 24-bit colour, with a
+subprocess of its own (VPBUSY, `busy.com`, priority 1) keeping one CPU busy.
+- PTYDRIVE caps a step's wait at 30 s and takes a longer one as 1.5 s, so "45 shot"
+  sent the next keys at once. Typed while VTOP asked the terminal its cursor position
+  at start-up, `ESC [ C` went to that question (harmless: it times out) and the `q`
+  to the first key wait, which threw its key away, so that VTOP never quit. Now a key
+  typed during start-up counts (`vp_main.c`).
+- Its transcript held 64 KB a step and dropped the rest without a word: a 30 s step at
+  132x40 in braille sends some 100 KB, so a frame was cut inside an SGR sequence and
+  `vtshot.py` showed a stray "l". Now 1 MB, with `{TRUNCATED}` if it is ever full.
+  The 80x24 live tests stay well under the old limit (no cut sequences in them).
+- It ends each read with a newline, which can fall inside a sequence; `vtshot.py`
+  now drops every newline that isn't the terminal's own `<LF>`.
+- DCL delta times want seconds below 60: `+0:0:70` is no time at all.
+
+## N13. The T0.1-0 kits installed on both nodes (2026-10-26, x86 and IA64)
+
+PRODUCT INSTALL (the user agreed: install on both, keep it installed) with
+`tests/vms/pcsi_install.com`: ISSINOHO X86VMS VTOP T0.1-0 and ISSINOHO I64VMS VTOP
+T0.1-0 installed; VTOP$ROOT (concealed, SYS$COMMON:[VTOP.]) and VTOP defined in the
+system table; VTOP.EXE, VTOP$SETUP.COM, README.VMS and LICENSE. in [VTOP],
+VTOP$STARTUP.COM in SYS$STARTUP; `@VTOP$ROOT:[000000]VTOP$SETUP.COM` defines the
+command and the installed image says "VTOP 0.1.0". `inst_keys.txt` runs it on a
+pseudo-terminal: the screen, the vms panel, help, quit, back at DCL. PCSI notes that it
+cannot validate the unsigned kits, as for every family kit. No SYSTARTUP_VMS or SYLOGIN
+line was added.

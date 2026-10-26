@@ -223,9 +223,11 @@ def ptydrive_bytes(data, step):
         if not line.startswith(b'---- '):
             out.append(line)
         current = locals().get('current', '')
-    text = b'\n'.join(out)
+    # PTYDRIVE ends each read with a newline: only <LF> is the terminal's own, so
+    # a newline without one is a read boundary (it can fall inside a sequence)
+    text = b''.join(out)
     text = re.sub(rb'\{[A-Z]+\}', b'', text)
-    text = text.replace(b'<LF>\n', b'\n')
+    text = text.replace(b'<LF>', b'\n')
     text = re.sub(rb'<ESC>', b'\x1b', text)
     text = re.sub(rb'<CR>', b'\r', text)
     text = re.sub(rb'<([0-9A-F]{2})>', lambda m: bytes([int(m.group(1), 16)]), text)

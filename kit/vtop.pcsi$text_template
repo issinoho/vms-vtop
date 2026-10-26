@@ -1,0 +1,18 @@
+=product @PRODUCER@ @BASE@ VTOP @PCSIVERSION@ full
+1 'PRODUCER
+=prompt @PRODUCER@
+1 'PRODUCT
+=prompt VTOP @VERSION@ for OpenVMS (vms-vtop): a btop-style system monitor, early test
+1 'NOTICE
+=prompt VTOP is distributed under the MIT licence. This is an early test release.
+1 RELEASE_NOTES
+=prompt Documentation is in [VTOP]README.VMS under the installation directory.
+1 POST_INSTALL
+=prompt Post-installation tasks for VTOP (vms-vtop)
+    At boot, add to SYS$MANAGER:SYSTARTUP_VMS.COM:
+    $ @SYS$STARTUP:VTOP$STARTUP.COM
+    For users, in SYS$MANAGER:SYLOGIN.COM or their LOGIN.COM:
+    $ @VTOP$ROOT:[000000]VTOP$SETUP.COM
+
+PRODUCT REMOVE VTOP deassigns VTOP$ROOT and VTOP. Options files
+(SYS$LOGIN:VTOP.INI) are users' own files and are kept.

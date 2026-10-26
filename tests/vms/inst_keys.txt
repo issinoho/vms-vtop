@@ -1,0 +1,9 @@
+# PTYDRIVE script: the installed VTOP (after pcsi_install.com), from its own command
+2 setup | @VTOP$ROOT:[000000]VTOP$SETUP.COM\r
+2 which | show symbol vtop\r
+5 start | vtop /graph=vt\r
+3 vms | v
+2 help | h
+2 nohelp | x
+2 quit | q
+2 done | write sys$output "DCL-OK-INST"\r

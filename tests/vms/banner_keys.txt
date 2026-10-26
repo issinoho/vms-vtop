@@ -1,0 +1,10 @@
+# PTYDRIVE script: a 132x40 screen for the README banner (tools/vtshot.py --step shot).
+# PTYDRIVE waits 30 s a step at most (longer is taken as 1.5 s), so the wait is two steps.
+2 symbol | vtop :== $'f$parse("[.build]vtop.exe")'\r
+2 size | set terminal/width=132/page=40\r
+2 busy | spawn/nowait/nolog/input=nl:/process=VPBUSY @[.tests.vms]busy 70\r
+1 start | vtop /graph=braille /colour=24 /interval=1\r
+30 fill | 
+15 shot | 
+2 quit | q
+2 reset | set terminal/width=80/page=24\r

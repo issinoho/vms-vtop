@@ -1,0 +1,26 @@
+--
+-- PCSI product description for VTOP (vms-vtop) on OpenVMS.
+-- Template: tools/kit.sh substitutes @PRODUCER@, @BASE@ and @PCSIVERSION@.
+--
+product @PRODUCER@ @BASE@ VTOP @PCSIVERSION@ full ;
+
+    -- VTOP.EXE needs only the C RTL, SMG$ and system services: no other product.
+
+    information RELEASE_NOTES phase after ;
+
+    directory [VTOP] ;
+
+    file [VTOP]VTOP.EXE ;
+    file [VTOP]VTOP$SETUP.COM ;
+    file [VTOP]README.VMS ;
+    file [VTOP]LICENSE. ;
+    file [SYS$STARTUP]VTOP$STARTUP.COM ;
+
+    -- Define VTOP$ROOT and VTOP now. VTOP installs no privileged image and changes no
+    -- login or startup procedure: those are post-installation tasks.
+    execute postinstall "@PCSI$DESTINATION:[SYS$STARTUP]VTOP$STARTUP.COM INSTALL" interactive ;
+    execute install "CONTINUE" remove "@PCSI$DESTINATION:[SYS$STARTUP]VTOP$STARTUP.COM REMOVE" ;
+
+    information POST_INSTALL phase after ;
+
+end product ;

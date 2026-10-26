@@ -164,7 +164,10 @@ int main(int argc, char **argv)
     /* two samples close together, so the first screen already has figures */
     if (vpp_sample(&sample)) vp_app_sample(&app, &sample);
     scan_procs();
-    vpp_key(250);
+    {
+        int k = vpp_key(250);           /* a key typed meanwhile still counts */
+        if (k != VK_TIMEOUT) vp_app_key(&app, k);
+    }
     next = vpp_now_ms();
     while (!app.quit) {
         char msg[256];

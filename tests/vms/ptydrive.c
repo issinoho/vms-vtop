@@ -39,14 +39,23 @@
 
 static unsigned short chan;
 static char *region;
-static char transcript[65536];
+static char transcript[1048576];    /* one step's output; a 132x40 braille screen
+                                       sends some 100 KB in 30 s */
 static unsigned int tlen;
+static int truncated;
 static volatile int child_done;
 static unsigned int child_status;
 
 static void tput(const char *s, unsigned int n)
 {
-    if (tlen + n >= sizeof transcript) n = sizeof transcript - 1 - tlen;
+    if (tlen + n >= sizeof transcript - 16) {   /* never silently: say so */
+        if (!truncated) {
+            memcpy(transcript + tlen, "{TRUNCATED}", 11);
+            tlen += 11;
+            truncated = 1;
+        }
+        return;
+    }
     memcpy(transcript + tlen, s, n);
     tlen += n;
 }
@@ -101,6 +110,7 @@ static void flush_transcript(void)
         else putchar(c);
     }
     tlen = 0;
+    truncated = 0;
     sys$setast(1);
     putchar('\n');
 }

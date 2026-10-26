@@ -1,0 +1,81 @@
+VTOP @VERSION@ for OpenVMS (vms-vtop, @ARCH@) - EARLY TEST RELEASE
+==================================================================
+
+VTOP is a full-screen, live system monitor for OpenVMS, inspired by btop: CPU
+(by processor mode and per CPU), memory, disks and network panels with history
+graphs, a process list you can sort, filter, view as a tree and act on, and a
+panel for what only VMS has: the cluster, shadow sets and queues.
+
+Starting it
+-----------
+    $ @VTOP$ROOT:[000000]VTOP$SETUP.COM   ! once, or in LOGIN.COM / SYLOGIN.COM
+    $ VTOP
+    $ VTOP/INTERVAL=5                    ! seconds between samples, 1 to 10
+    $ VTOP/GRAPH=VT/COLOUR=MONO          ! a monochrome VT220/VT320/VT520
+
+It needs a terminal of at least 70 x 20 and uses all of it (resize as you like).
+On an xterm-type terminal with UTF-8 it draws braille graphs in 24-bit colour;
+on a VT or DECterm, DEC line drawing in 8 colours. /GRAPH=BRAILLE|BLOCK|VT and
+/COLOUR=24|256|8|MONO choose for yourself. h, ? or Help shows every key; q, F10
+or Ctrl/Z leaves.
+
+Keys
+----
++ -        refresh interval            g c     graph characters, colours
+v          net, vms or both panels     b n     the network device shown
+Up Down Prev Next   select a process   < >     sort column; r reverses it
+t          tree by owner process       / f     filter: name, user, image, PID
+i Return   details: image, login time, quotas, privileges
+S R        suspend, resume             D P     delete, set priority
+w          save these settings         Ctrl/W  measure the terminal, redraw
+
+S, R, D and P are capitals, so a lowercase slip does nothing. Each asks first,
+naming the PID, process, user and image; only Y says yes, and keys typed ahead
+are thrown away before the question.
+
+Privileges
+----------
+VTOP enables no privilege. It shows the processes your current privileges let
+you see (all of them with WORLD, your group's with GROUP, else your own; the
+proc panel's title says which), and VMS checks each action exactly as it would
+SET PROCESS/SUSPEND or STOP/IDENTIFICATION. VTOP won't suspend or delete itself.
+
+The vms panel
+-------------
+The cluster's members with their votes, and the quorum; each shadow set, with
+copy or merge progress; every queue with its state, running jobs and limit,
+pending and holding jobs (holding includes /AFTER jobs). Stopped, stalled and
+paused queues come first, in warning colour. Page and swap files are the
+totals in the mem panel (per-file figures need privilege).
+
+Options file
+------------
+w writes the interval, sort, tree, panel and network device (and the graph and
+colour, if you chose them this time) to SYS$LOGIN:VTOP.INI, a new version each
+time; VTOP reads it when it starts. Lines are "name = value"; ! starts a
+comment. The qualifiers and logical names below win over the file.
+
+Logical names
+-------------
+VTOP$GRAPH     BRAILLE, BLOCK or VT, as /GRAPH
+VTOP$COLOUR    24, 256, 8 or MONO, as /COLOUR
+VTOP$OPTIONS   the options file (default SYS$LOGIN:VTOP.INI)
+VTOP$SIZE      "132x40": for a terminal that doesn't answer a size query
+
+Setting it up
+-------------
+PRODUCT INSTALL has defined VTOP$ROOT and VTOP once. To define them at every
+boot, add to SYS$MANAGER:SYSTARTUP_VMS.COM:
+    $ @SYS$STARTUP:VTOP$STARTUP.COM
+and give users the VTOP command (SYLOGIN.COM or their LOGIN.COM):
+    $ @VTOP$ROOT:[000000]VTOP$SETUP.COM
+
+Limits of this release
+----------------------
+- Disks show operations per second, not bytes: VMS counts operations per
+  device.
+- On IA64, VTOP's own CPU time may show as nothing: short bursts fall between
+  the clock ticks that charge it.
+
+VTOP is unrelated to btop and contains none of its code or themes.
+MIT licence: see LICENSE. Source: https://github.com/issinoho/vms-vtop

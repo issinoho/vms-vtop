@@ -7,7 +7,7 @@ node=${1:?usage: push.sh <node>}
 v=$top/tools/vms.sh
 cd "$top"
 $v "$node" put build_vms.com LICENSE
-for d in src src/core src/main src/plat src/plat/vms tests tests/unit tests/snap tests/vms; do
+for d in kit src src/core src/main src/plat src/plat/vms tests tests/unit tests/snap tests/vms; do
     [ -d "$d" ] || continue
     files=$(find "$d" -maxdepth 1 -type f | sort)
     # shellcheck disable=SC2086
