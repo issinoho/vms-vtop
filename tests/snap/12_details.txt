@@ -27,4 +27,4 @@
 │                          ⢸⣿⡇⠙⢿                ││ 2020014C IAIN_2          IAIN         HIB     0.0   16M   │
 │                          ⠈⠻⡇   ▲ 39K/s        ││ 2020014D IAIN_3          IAIN         SUSP    0.0   19M   │
 ╰───────────────────────────────────────────────╯╰─ < > CPU% high  / filter  t tree  i info  S R D P act ────╯
- q quit  h help  +- interval 2s  g graph BRAILLE  c colour 24  b n network                         VTOP 0.1.0
+ q quit  h help  +- interval 2s  g graph BRAILLE  c colour 24  v vms  b n network                  VTOP 0.1.0

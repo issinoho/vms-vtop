@@ -120,3 +120,45 @@ VTOP's own cost with the process scan, `tests/vms/test_cpu.com` (20 s at
 2 s before the scan, N6). IA64's accounting showed no change from 0.01 s although
 VTOP drew for the whole 20 s: its short bursts fall between the clock ticks that
 charge CPU time, so take the x86 figure.
+
+## N10. What the vms panel can read without privilege (2026-10-26, x86 and IA64)
+
+`probes/probe_vms.c` (`probe_vms.com`), as the user's account:
+- A wildcard `$GETQUI` (`QUI$_DISPLAY_QUEUE`, `QUI$M_SEARCH_WILDCARD`, "*") lists all
+  7 queues on each node with status, flags and job counts; a pass costs 2 ms on x86
+  and 0.5 ms on IA64. The end is `JBC$_NOMOREQUE` in the IOSB's first *longword*:
+  reading it as a word gives 81AA and an unknown message. The kind is in the flags
+  (`QUI$M_QUEUE_BATCH` 1, `GENERIC` 200, `TERMINAL` 40000, `PRINTER` 1000000), the
+  state in the status (`IDLE` 2, `BUSY` 10000, `STOPPED` 1000, `SERVER` 200, ...):
+  the two sets reuse mask values, so they must not be mixed.
+- Jobs waiting with /AFTER are timed release (`QUI$_TIMED_RELEASE_JOB_COUNT`), not
+  holding: SYS$BATCH's three housekeeping jobs show as timed 3, hold 0.
+- Neither node is in a cluster: `SYI$_CLUSTER_MEMBER` 0, and a wildcard `$GETSYI`
+  (csid -1) ends at once with NOMORENODE, without even this node.
+- Neither node has shadow sets; the `DVI$_SHDW_*` items read 0 on a plain disk.
+- `SYI$_PAGFILCNT` and `SYI$_SWPFILCNT` read 0, though x86 has two page files and a
+  swap file (`SHOW MEMORY/FILES`, which is installed with privilege).
+
+So the cluster and shadow set lines are tested on the stub only; on these nodes the
+panel shows "standalone" and the queues.
+
+## N11. The vms panel and the options file on the nodes (2026-10-26, x86 and IA64)
+
+`tests/vms/test_live5.com` (`live5_keys.txt`) on an 80x24 pseudo-terminal. It holds a
+job of its own (VPTEST_Q, in SYS$BATCH, deleted at the end) and points `VTOP$OPTIONS`
+at VPTEST.INI in the work directory:
+- `v` shows the vms panel in the net panel's place: "standalone", "queues 7 jobs 4",
+  SYS$BATCH first with hold 4 (three timed-release housekeeping jobs and the test's
+  held one), then the rest by name, "+5 more". IA64's SYS$BATCH is an execution queue
+  and shows run 0/4; x86's is generic and shows none. `v` again: both (the vms panel
+  has one queue line at 80x24), then net.
+- `w` wrote VPTEST.INI;1 with interval, sort, reverse, tree, panel, network and graph
+  (given as `/GRAPH=VT`, so chosen in this session; colour wasn't, so it is left
+  out), and the status line named the file with its version.
+- VTOP started again with that file: the vms panel, sorted by Mem, as a tree. With a
+  line `colr = 8` added, the status line says "...VPTEST.INI line 10: unknown option
+  "colr"" and the rest of the file still applies.
+
+Cost, `test_cpu.com cpu5_keys.txt` (20 s at `/INTERVAL=1` with the vms panel): x86
+VTOP 0.13 s of CPU, the QUEUE_MANAGER process one 10 ms tick on each node. IA64's
+accounting again shows no change for VTOP (N9).

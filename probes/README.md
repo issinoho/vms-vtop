@@ -1,6 +1,6 @@
-# Phase 0 probes
+# Probes
 
-Bounded and read-only. Results are in `docs/NOTES.md` N1–N5.
+Bounded and read-only. Results are in `docs/NOTES.md` N1–N5 (Phase 0) and N10.
 
     tools/vms.sh x86 put probes/*.c probes/*.h probes/probe_glyph_keys.txt
     tools/vms.sh x86 run probes/probes.com [seconds]
@@ -11,3 +11,5 @@ Bounded and read-only. Results are in `docs/NOTES.md` N1–N5.
 - `probe_glyph.c`: braille, block, DEC graphics and colour through the terminal
   driver, run on a pseudo-terminal by `ptydrive.c` (from vms-vtree) with
   `probe_glyph_keys.txt` (N5).
+- `probe_vms.c` (`probe_vms.com`, Phase 3): a wildcard `$GETQUI` and its cost, the
+  cluster items and a wildcard `$GETSYI` over its nodes, the shadowing items (N10).

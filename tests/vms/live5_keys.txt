@@ -1,0 +1,20 @@
+# PTYDRIVE script: the vms panel (D9) and the options file (D10). test_live5.com holds
+# a job of its own in SYS$BATCH and points VTOP$OPTIONS at VPTEST.INI here.
+2 symbol | vtop :== $'f$parse("[.build]vtop.exe")'\r
+5 start | vtop /graph=vt /interval=1\r
+4 vms | v
+2 both | v
+2 net | v
+3 vms2 | v
+# sort by Mem (Right x2 from CPU%), tree, then save: a new VPTEST.INI
+1 sort | \e[C\e[C
+1 tree | t
+3 saved | w
+2 quit1 | q
+# again: the file gives the vms panel, Mem and the tree; then a bad line in it
+5 again | vtop /graph=vt /interval=1\r
+2 quit2 | q
+2 badline | open/append f vptest.ini\rwrite f "colr = 8"\rclose f\r
+5 warned | vtop /graph=vt /interval=1\r
+2 quit3 | q
+2 done | write sys$output "DCL-OK5"\r

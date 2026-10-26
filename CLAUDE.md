@@ -39,8 +39,10 @@ PTYDRIVE transcript) and saves a PNG: look at the screens, not just the text.
 On the nodes: `tools/push.sh <node>` then `tools/vms.sh <node> dcl '@build_vms TEST'`;
 `tools/live.sh <node>` for the live test (`tests/vms/live_keys.txt`), and
 `tests/vms/test_live2.com` for broadcast, resize and Ctrl/Y, `test_live4.com` for the
-process list and its actions (on a subprocess it spawns, VPTEST1), `test_cpu.com` for
-VTOP's own CPU time. `tests/vms/t_sample.com`
+process list and its actions (on a subprocess it spawns, VPTEST1), `test_live5.com` for
+the vms panel and the options file (a held job of its own, VTOP$OPTIONS pointed at a
+test file: never the user's SYS$LOGIN:VTOP.INI), `test_cpu.com [keys]` for VTOP's own
+CPU time. `tests/vms/t_sample.com`
 compares the sampler with MONITOR.
 
 When the nodes look busy, check SHOW SYSTEM before blaming VTOP: other sessions run

@@ -1,7 +1,9 @@
 /* vp_main.c - VTOP's main loop, the same on every platform.
 
    VTOP [/GRAPH=BRAILLE|BLOCK|VT] [/COLOUR=24|256|8|MONO] [/INTERVAL=n] [/VERSION]
-   Qualifiers may be abbreviated; "-graph=vt" works too (for the Linux stub). */
+   Qualifiers may be abbreviated; "-graph=vt" works too (for the Linux stub).
+   Settings come from the qualifiers, then VTOP$GRAPH and VTOP$COLOUR, then the options
+   file (SYS$LOGIN:VTOP.INI, or what VTOP$OPTIONS names), then detection (D10). */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,6 +15,9 @@
 static vp_app app;
 static vp_proc *pbuf;
 static int pcap;
+static vp_vms vmsbuf;
+static char opt_file[256];
+static vp_opts file_opts;           /* what the options file says (D10) */
 
 /* a process scan into the app, with room made when the system has more */
 static void scan_procs(void)
@@ -36,6 +41,45 @@ static void scan_procs(void)
     vp_app_procs(&app, pbuf, n, &info, vpp_now_ms());
 }
 
+/* the options file: read at the start; graph, colour and interval are left to main.
+   A bad line goes into warn, for the status line. */
+static void read_options(char *warn, size_t size)
+{
+    static char text[8192];
+    char err[120];
+    int bad;
+    warn[0] = '\0';
+    if (!vpp_option("VTOP$OPTIONS", opt_file, sizeof opt_file))
+        vpp_options_default(opt_file, sizeof opt_file);
+    vp_opts_init(&file_opts);
+    if (vpp_read_file(opt_file, text, sizeof text) < 0) return;
+    bad = vp_opts_parse(&file_opts, text, err, sizeof err);
+    if (bad) {
+        snprintf(warn, size, "%s %s%s", opt_file, err, bad > 1 ? " (and more)" : "");
+    }
+}
+
+/* w: the settings now, except graph and colour unless chosen in this session */
+static void save_options(void)
+{
+    vp_opts o;
+    char text[1024], msg[300], t[400];
+    vp_app_options(&app, &o);
+    if (!app.graph_chosen) o.graph = file_opts.graph;
+    if (!app.colour_chosen) o.colour = file_opts.colour;
+    if (vp_opts_format(&o, text, sizeof text) < 0) {
+        vp_app_message(&app, "can't save the options: too long");
+        return;
+    }
+    if (vpp_write_file(opt_file, text, msg, sizeof msg)) {
+        file_opts = o;
+        snprintf(t, sizeof t, "options saved to %s", msg);
+    } else {
+        snprintf(t, sizeof t, "can't save the options: %s", msg);
+    }
+    vp_app_message(&app, t);
+}
+
 static int value_of(const char *arg, const char *word, size_t min, const char **val)
 {
     char name[32];
@@ -53,8 +97,8 @@ static int value_of(const char *arg, const char *word, size_t min, const char **
 
 int main(int argc, char **argv)
 {
-    int graph = -1, colour = -1, interval = 2, utf8 = 0, i, rows, cols;
-    char err[200], opt[64];
+    int graph = -1, colour = -1, interval = -1, utf8 = 0, i, rows, cols, graph_q, colour_q;
+    char err[200], opt[64], warn[400];
     const char *v;
     vp_identity id;
     vp_sample sample;
@@ -80,8 +124,14 @@ int main(int argc, char **argv)
             return VP_EXIT_BAD;
         }
     }
+    graph_q = graph >= 0;
+    colour_q = colour >= 0;
     if (graph < 0 && vpp_option("VTOP$GRAPH", opt, sizeof opt)) graph = vp_graph_parse(opt);
     if (colour < 0 && vpp_option("VTOP$COLOUR", opt, sizeof opt)) colour = vp_colour_parse(opt);
+    read_options(warn, sizeof warn);
+    if (graph < 0) graph = file_opts.graph;
+    if (colour < 0) colour = file_opts.colour;
+    if (interval < 0) interval = file_opts.interval >= 0 ? file_opts.interval : 2;
 
     if (!vpp_start(&utf8, err, sizeof err)) {
         fprintf(stderr, "VTOP: %s\n", err);
@@ -98,9 +148,17 @@ int main(int argc, char **argv)
         fprintf(stderr, "VTOP: no memory for a %dx%d screen\n", cols, rows);
         return VP_EXIT_FAIL;
     }
+    {
+        vp_opts rest = file_opts;       /* the file's other settings */
+        rest.graph = rest.colour = rest.interval = -1;
+        vp_app_apply(&app, &rest);
+    }
     app.graph = graph;
     app.colour = colour;
     app.interval = interval;
+    app.graph_chosen = graph_q;
+    app.colour_chosen = colour_q;
+    if (warn[0]) vp_app_message(&app, warn);
     vp_theme_init(pal);
 
     /* two samples close together, so the first screen already has figures */
@@ -127,6 +185,11 @@ int main(int argc, char **argv)
             scan_procs();
         }
         if (app.flush) { vpp_flush_keys(); app.flush = 0; }
+        if (app.save) { save_options(); app.save = 0; }
+        if (vp_app_shows_vms(&app) && (sampled || app.vms_want || !app.have_vms)) {
+            vpp_vms(&vmsbuf);
+            vp_app_vms(&app, &vmsbuf);
+        }
         vp_app_update_view(&app);
         if (app.detail && app.detail_pid && (app.detail_want || sampled)) {
             vp_proc_detail d;

@@ -62,9 +62,13 @@ int vp_app_resize(vp_app *a, int rows, int cols)
 
 void vp_app_sample(vp_app *a, const vp_sample *s)
 {
+    int i;
     vp_model_update(&a->model, s);
     if (a->message_ticks > 0) a->message_ticks--;
     if (a->nic >= s->nnic) a->nic = 0;
+    /* the options file's NIC, once the sampler has seen it */
+    for (i = 0; a->want_nic[0] && i < s->nnic; i++)
+        if (!vp_strcasecmp(s->nic[i].name, a->want_nic)) { a->nic = i; a->want_nic[0] = '\0'; }
 }
 
 void vp_app_message(vp_app *a, const char *text)
@@ -244,10 +248,12 @@ void vp_app_key(vp_app *a, int key)
         break;
     case 'g': case 'G':
         a->graph = (a->graph + 1) % VP_NGRAPH;
+        a->graph_chosen = 1;
         a->repaint = 1;
         break;
     case 'c': case 'C':
         a->colour = (a->colour + 1) % VP_NCOLOUR;
+        a->colour_chosen = 1;
         a->repaint = 1;
         break;
     case 'n': case 'N':
@@ -259,6 +265,18 @@ void vp_app_key(vp_app *a, int key)
     case VK_CTRL_W:
         a->repaint = 1;
         a->measure = 1;
+        break;
+    case 'v': case 'V': {
+        /* net, vms, both (D9); both only where it fits */
+        int p = vp_app_panel(a);
+        p = p == VP_P_NET ? VP_P_VMS : p == VP_P_VMS && vp_layout_fits_both(a->scr.rows)
+            ? VP_P_BOTH : VP_P_NET;
+        a->panel = p;
+        if (p != VP_P_NET) a->vms_want = 1;
+        break;
+    }
+    case 'w': case 'W':
+        a->save = 1;
         break;
     case 'h': case 'H': case '?': case VK_HELP: case VK_PF2:
         a->help = 1;
@@ -302,18 +320,116 @@ void vp_app_key(vp_app *a, int key)
 
 static int clampi(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
 
-void vp_layout_for(int rows, int cols, vp_layout *l)
+/* the mem panel keeps 6 rows at least; both net and vms need 9 between them */
+#define MEM_MIN 6
+#define BOTH_MIN 9
+
+static int rest_rows(int rows, int *cpu_h)
 {
-    int avail = rows - 1, cpu_h, lw, rest, net_h;
-    cpu_h = clampi(avail / 3 + 1, 6, 16);
+    int avail = rows - 1;
+    *cpu_h = clampi(avail / 3 + 1, 6, 16);
+    return avail - *cpu_h;
+}
+
+int vp_layout_fits_both(int rows)
+{
+    int cpu_h;
+    return rest_rows(rows, &cpu_h) - MEM_MIN >= BOTH_MIN;
+}
+
+void vp_layout_for(int rows, int cols, int panel, vp_layout *l)
+{
+    int avail = rows - 1, cpu_h, lw, rest, slot, net_h;
+    rest = rest_rows(rows, &cpu_h);
     lw = clampi(cols * 45 / 100, 38, 64);
-    rest = avail - cpu_h;
-    net_h = clampi(rest * 2 / 5, 5, 12);
+    if (panel == VP_P_BOTH && !vp_layout_fits_both(rows)) panel = VP_P_NET;
+    if (panel == VP_P_BOTH) {
+        slot = clampi(rest * 3 / 5, BOTH_MIN, 24);
+        if (slot > rest - MEM_MIN) slot = rest - MEM_MIN;
+        net_h = clampi(slot * 2 / 5, 5, 10);
+    } else {
+        slot = net_h = clampi(rest * 2 / 5, 5, 12);
+    }
+    l->show_net = panel != VP_P_VMS;
+    l->show_vms = panel != VP_P_NET;
     l->cpu.r1 = 0; l->cpu.c1 = 0; l->cpu.r2 = cpu_h - 1; l->cpu.c2 = cols - 1;
-    l->mem.r1 = cpu_h; l->mem.c1 = 0; l->mem.r2 = avail - net_h - 1; l->mem.c2 = lw - 1;
-    l->net.r1 = avail - net_h; l->net.c1 = 0; l->net.r2 = avail - 1; l->net.c2 = lw - 1;
+    l->mem.r1 = cpu_h; l->mem.c1 = 0; l->mem.r2 = avail - slot - 1; l->mem.c2 = lw - 1;
+    /* net above, vms below; either alone takes the whole slot */
+    l->net.r1 = avail - slot; l->net.c1 = 0; l->net.c2 = lw - 1;
+    l->net.r2 = panel == VP_P_BOTH ? avail - slot + net_h - 1 : avail - 1;
+    l->vms.r1 = panel == VP_P_BOTH ? l->net.r2 + 1 : avail - slot; l->vms.c1 = 0;
+    l->vms.r2 = avail - 1; l->vms.c2 = lw - 1;
     l->proc.r1 = cpu_h; l->proc.c1 = lw; l->proc.r2 = avail - 1; l->proc.c2 = cols - 1;
     l->status_row = rows - 1;
+}
+
+int vp_app_panel(const vp_app *a)
+{
+    int p = a->panel;
+    if (p == VP_P_AUTO) p = a->scr.rows >= 40 ? VP_P_BOTH : VP_P_NET;
+    if (p == VP_P_BOTH && !vp_layout_fits_both(a->scr.rows)) p = VP_P_NET;
+    return p;
+}
+
+int vp_app_shows_vms(const vp_app *a)
+{
+    return vp_app_panel(a) != VP_P_NET;
+}
+
+static int cmp_node(const void *x, const void *y)
+{
+    return strcmp(((const vp_node *) x)->name, ((const vp_node *) y)->name);
+}
+
+/* copying or merging first, then by name */
+static int cmp_shadow(const void *x, const void *y)
+{
+    const vp_shadow *p = (const vp_shadow *) x, *q = (const vp_shadow *) y;
+    int bp = p->copy >= 0 || p->merge >= 0, bq = q->copy >= 0 || q->merge >= 0;
+    if (bp != bq) return bq - bp;
+    return strcmp(p->name, q->name);
+}
+
+void vp_app_vms(vp_app *a, const vp_vms *v)
+{
+    a->vms = *v;
+    if (a->vms.nqueue > VP_MAX_QUEUE) a->vms.nqueue = VP_MAX_QUEUE;
+    if (a->vms.nnode > VP_MAX_NODE) a->vms.nnode = VP_MAX_NODE;
+    if (a->vms.nshadow > VP_MAX_SHADOW) a->vms.nshadow = VP_MAX_SHADOW;
+    if (a->vms.nnode > 1) qsort(a->vms.node, (size_t) a->vms.nnode, sizeof a->vms.node[0], cmp_node);
+    if (a->vms.nshadow > 1)
+        qsort(a->vms.shadow, (size_t) a->vms.nshadow, sizeof a->vms.shadow[0], cmp_shadow);
+    vp_queue_order(&a->vms, a->vms_order);
+    a->have_vms = 1;
+    a->vms_want = 0;
+}
+
+void vp_app_apply(vp_app *a, const vp_opts *o)
+{
+    if (o->graph >= 0) a->graph = o->graph;
+    if (o->colour >= 0) a->colour = o->colour;
+    if (o->interval >= 0) a->interval = o->interval;
+    if (o->sort >= 0) a->sort = o->sort;
+    if (o->reverse >= 0) a->reverse = o->reverse;
+    if (o->tree >= 0) a->tree = o->tree;
+    if (o->panel >= 0) a->panel = o->panel;
+    if (o->network[0]) vp_strlcpy(a->want_nic, o->network, sizeof a->want_nic);
+}
+
+void vp_app_options(const vp_app *a, vp_opts *o)
+{
+    vp_opts_init(o);
+    o->graph = a->graph;
+    o->colour = a->colour;
+    o->interval = a->interval;
+    o->sort = a->sort;
+    o->reverse = a->reverse;
+    o->tree = a->tree;
+    o->panel = a->panel;
+    if (a->model.cur.nnic > 0 && a->nic < a->model.cur.nnic)
+        vp_strlcpy(o->network, a->model.cur.nic[a->nic].name, sizeof o->network);
+    else
+        vp_strlcpy(o->network, a->want_nic, sizeof o->network);
 }
 
 /* " text " in a box's top or bottom line at col; returns the column after it */
@@ -571,6 +687,157 @@ static void draw_net(vp_app *a, const vp_rect *b)
             vp_fmt_bytes(v, sizeof v, (double) c->nic[n].tx);
             snprintf(t, sizeof t, "tot %s", v);
             vp_put(s, rb - 2, x + 2, t, VP_K_DIM, 0, sw - 2);
+        }
+    }
+}
+
+/* ---------- vms (D9) ---------- */
+
+/* "+3 more" in place of the last line that fits */
+static void more_line(vp_screen *s, int row, int col, int n)
+{
+    char t[24];
+    snprintf(t, sizeof t, "+%d more", n);
+    vp_put(s, row, col, t, VP_K_DIM, 0, -1);
+}
+
+static void divider(vp_screen *s, int r, const vp_rect *b, int fg)
+{
+    vp_putc(s, r, b->c1, VP_U_LTEE, fg, 0, 0);
+    vp_fill(s, r, b->c1 + 1, b->c2 - b->c1 - 1, VP_U_HLINE, fg, 0, 0);
+    vp_putc(s, r, b->c2, VP_U_RTEE, fg, 0, 0);
+}
+
+static void num_right(vp_screen *s, int row, int col_end, int v)
+{
+    char t[16];
+    snprintf(t, sizeof t, "%d", v);
+    vp_put_right(s, row, col_end, t, v ? VP_K_TEXT : VP_K_DIM, 0);
+}
+
+/* rows for the members, the shadow sets and the queues (divider included): the
+   queues a third (two at least), then shadow sets and members all they need, then the
+   queues the rest */
+static void vms_rows(int ih, int need_n, int need_s, int need_q, int *rn, int *rs, int *rq)
+{
+    int left = ih;
+    *rq = ih / 3 > 2 ? ih / 3 : 2;
+    if (*rq > need_q) *rq = need_q;
+    if (*rq > left) *rq = left;
+    left -= *rq;
+    *rs = need_s < left ? need_s : left; left -= *rs;
+    *rn = need_n < left ? need_n : left; left -= *rn;
+    *rq += left;
+}
+
+/* the i'th of n items in rows lines: the last line says "+k more" when they don't all
+   fit (but one line alone shows the first item) */
+static int cut_here(int i, int n, int rows)
+{
+    return rows > 1 && n > rows && i == rows - 1;
+}
+
+static void draw_vms(vp_app *a, const vp_rect *b)
+{
+    vp_screen *s = &a->scr;
+    const vp_vms *v = &a->vms;
+    int ih = b->r2 - b->r1 - 1, iw = b->c2 - b->c1 - 1, r = b->r1 + 1, i, n, col;
+    int rn, rs, rq, info, total;
+    char t[96];
+
+    col = vp_box(s, b->r1, b->c1, b->r2, b->c2, VP_K_VMS_BOX, "vms", VP_K_TITLE) + 1;
+    if (!a->have_vms) {
+        vp_put(s, r, b->c1 + 2, "reading...", VP_K_DIM, 0, iw - 2);
+        return;
+    }
+    if (v->cluster) {
+        snprintf(t, sizeof t, "cluster %d node%s", v->nodes, v->nodes == 1 ? "" : "s");
+        col = border_text(s, b->r1, col, t, VP_K_TITLE, VP_A_BOLD) + 1;
+        snprintf(t, sizeof t, "votes %d quorum %d", v->votes, v->quorum);
+        if (col + text_len(t) + 2 < b->c2)
+            border_text(s, b->r1, col, t, v->votes < v->quorum ? VP_K_WARN : VP_K_TEXT,
+                        v->votes < v->quorum ? VP_A_BOLD : 0);
+    } else {
+        border_text(s, b->r1, col, "standalone", VP_K_TITLE, VP_A_BOLD);
+    }
+
+    total = v->queue_total > v->nqueue ? v->queue_total : v->nqueue;
+    info = !v->cluster && !v->nshadow && ih >= 6;       /* "no shadow sets" */
+    vms_rows(ih, v->cluster ? v->nnode : 0, v->nshadow ? v->nshadow : info,
+             1 + (v->queues_ok ? (total ? total : 1) : 1), &rn, &rs, &rq);
+
+    for (i = 0; i < rn; i++, r++) {
+        const vp_node *nd = &v->node[i];
+        if (cut_here(i, v->nnode, rn)) { more_line(s, r, b->c1 + 2, v->nnode - i); r++; break; }
+        vp_put(s, r, b->c1 + 1, nd->name, nd->self ? VP_K_TITLE : VP_K_TEXT,
+               nd->self ? VP_A_BOLD : 0, 8);
+        vp_put(s, r, b->c1 + 10, nd->version, VP_K_TEXT, 0, 8);
+        snprintf(t, sizeof t, "votes %d", nd->votes);
+        vp_put(s, r, b->c1 + 19, t, nd->votes ? VP_K_TEXT : VP_K_DIM, 0, iw - 19);
+    }
+    if (!v->nshadow && rs) {
+        vp_put(s, r++, b->c1 + 2, "no shadow sets", VP_K_DIM, 0, iw - 2);
+        rs = 0;
+    }
+    for (i = 0; i < rs; i++, r++) {
+        const vp_shadow *sh = &v->shadow[i];
+        int x = b->c1 + 10, pct = sh->copy >= 0 ? sh->copy : sh->merge;
+        if (cut_here(i, v->nshadow, rs)) { more_line(s, r, b->c1 + 2, v->nshadow - i); r++; break; }
+        vp_put(s, r, b->c1 + 1, sh->name, VP_K_TITLE, 0, 8);
+        snprintf(t, sizeof t, "%d mbr", sh->members);
+        x += vp_put(s, r, x, t, VP_K_TEXT, 0, -1) + 1;
+        if (pct >= 0) {
+            snprintf(t, sizeof t, "%s %d%%", sh->copy >= 0 ? "copying" : "merging", pct);
+            x += vp_put(s, r, x, t, VP_K_WARN, VP_A_BOLD, b->c2 - x) + 1;
+            if (b->c2 - x > 3) vp_meter(s, r, x, b->c2 - x, pct, a->graph);
+        } else {
+            vp_put(s, r, x, "steady", VP_K_DIM, 0, b->c2 - x);
+        }
+    }
+
+    /* the queues: a divider with the counts, then one line each */
+    if (rq < 1) return;
+    divider(s, r, b, VP_K_VMS_BOX);
+    if (v->queues_ok) {
+        snprintf(t, sizeof t, "queues %d", total);
+        col = border_text(s, r, b->c1 + 2, t, VP_K_TITLE, VP_A_BOLD);
+        n = vp_queue_jobs(v);
+        snprintf(t, sizeof t, "jobs %d", n);
+        if (col + 8 + 15 < b->c2) border_text(s, r, col, t, n ? VP_K_TEXT : VP_K_DIM, 0);
+        /* the headings end where the numbers under them end */
+        vp_put(s, r, b->c2 - 14, " run pend hold", VP_K_DIM, 0, -1);
+    } else {
+        border_text(s, r, b->c1 + 2, "queues", VP_K_TITLE, VP_A_BOLD);
+    }
+    r++;
+    rq--;
+    if (rq < 1) return;
+    if (!v->queues_ok) {
+        vp_put(s, r, b->c1 + 2, v->queue_err[0] ? v->queue_err : "no queue manager",
+               VP_K_WARN, 0, iw - 2);
+        return;
+    }
+    if (v->nqueue == 0) { vp_put(s, r, b->c1 + 2, "no queues", VP_K_DIM, 0, iw - 2); return; }
+    {
+        /* from the right: hold, pend, run (exec/limit), state; the kind on wide panels */
+        int wide = iw >= 50, sx = b->c2 - 24, kx = sx - 8, nw = (wide ? kx : sx) - b->c1 - 2;
+        for (i = 0; i < v->nqueue && i < rq; i++, r++) {
+            const vp_queue *q = &v->queue[a->vms_order[i]];
+            int prob = vp_queue_problem(q->status),
+                act = (q->status & VP_QS_BUSY) || q->exec || q->pend || q->hold || q->timed;
+            if (cut_here(i, total, rq)) { more_line(s, r, b->c1 + 2, total - i); break; }
+            vp_put(s, r, b->c1 + 1, q->name, prob ? VP_K_WARN : act ? VP_K_TITLE : VP_K_TEXT,
+                   prob ? VP_A_BOLD : 0, nw);
+            if (wide) vp_put(s, r, kx, vp_queue_kind(q->kind), VP_K_DIM, 0, 7);
+            vp_put(s, r, sx, vp_queue_state(q->status),
+                   prob ? VP_K_WARN : q->status & VP_QS_BUSY ? VP_K_HI
+                   : q->status & VP_QS_IDLE ? VP_K_DIM : VP_K_HI, prob ? VP_A_BOLD : 0, 8);
+            if (q->kind != VP_QK_GENERIC) {
+                snprintf(t, sizeof t, "%d/%d", q->exec, q->limit);
+                vp_put_right(s, r, b->c2 - 11, t, q->exec ? VP_K_TEXT : VP_K_DIM, 0);
+            }
+            num_right(s, r, b->c2 - 6, q->pend);
+            num_right(s, r, b->c2 - 1, q->hold + q->timed);
         }
     }
 }
@@ -932,6 +1199,8 @@ static void draw_help(vp_app *a)
         { "g", "graphs: braille, block or VT" },
         { "c", "colours: 24-bit, 256, 8 or mono" },
         { "b n", "the network device shown" },
+        { "v", "net, vms (queues, cluster) or both" },
+        { "w", "save these settings (VTOP.INI)" },
         { "Ctrl/W", "measure the terminal and redraw" },
         { "Up Down Prev Next", "select a process" },
         { "< > Left Right", "sort column;  r  reverses it" },
@@ -980,6 +1249,7 @@ static void draw_status(vp_app *a, int row)
     col = key_hint(s, row, col, "g", t);
     snprintf(t, sizeof t, "colour %s", vp_colour_name(a->colour));
     col = key_hint(s, row, col, "c", t);
+    if (col + 8 < s->cols) col = key_hint(s, row, col, "v", vp_app_panel(a) == VP_P_NET ? "vms" : "net");
     if (a->model.cur.nnic > 1 && col + 12 < s->cols) key_hint(s, row, col, "b n", "network");
     snprintf(t, sizeof t, "VTOP %s", VP_VERSION);
     if (col + text_len(t) + 14 < s->cols) vp_put_right(s, row, s->cols - 2, t, VP_K_DIM, 0);
@@ -997,10 +1267,11 @@ void vp_app_draw(vp_app *a)
         vp_put(s, s->rows / 2, 0, t, VP_K_TITLE, VP_A_BOLD, s->cols);
         return;
     }
-    vp_layout_for(s->rows, s->cols, &l);
+    vp_layout_for(s->rows, s->cols, vp_app_panel(a), &l);
     draw_cpu(a, &l.cpu);
     draw_mem(a, &l.mem);
-    draw_net(a, &l.net);
+    if (l.show_net) draw_net(a, &l.net);
+    if (l.show_vms) draw_vms(a, &l.vms);
     draw_proc(a, &l.proc);
     draw_status(a, l.status_row);
     if (a->input == VP_IN_PRIO || a->input == VP_IN_CONFIRM) draw_question(a);

@@ -84,10 +84,21 @@ The user tried it from their own terminal and signed off D8 on 2026-10-26.
 Exit: the user tries the list and the actions from their own terminal (on a process
 of their own) and signs off D8.
 
-## Phase 3: VMS panels and options
+## Phase 3: VMS panels and options (done 2026-10-26)
 
 - Queues, cluster members and votes, shadow set copy/merge progress, page/swap files.
 - Graph modes (D6), palette and monochrome (D7), an options file in SYS$LOGIN.
+
+Status 2026-10-26: built to D9 and D10 on both nodes (NOTES N10, N11). Graph modes and
+palette were done in Phase 1. Page and swap files stay as totals in the mem panel:
+per-file figures need privilege (N10). `make test` (144 core checks, 78 app checks,
+20 snapshots) passes on Linux and through `build_vms TEST` on both nodes.
+`test_live5.com` drives the vms panel and the options file on a job and a file of its
+own. Neither node is in a cluster or has shadow sets, so those lines are tested on the
+stub only (`make demo` shows them).
+
+Exit: the user tries `v` and `w` from their own terminal and signs off D9 and D10.
+Signed off by the user 2026-10-26.
 
 ## Phase 4: kit and release
 

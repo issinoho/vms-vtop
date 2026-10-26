@@ -92,6 +92,55 @@ typedef struct {
     vp_quota quota[12];
 } vp_proc_detail;
 
+/* the vms panel (D9): the cluster, shadow sets and queues */
+#define VP_MAX_NODE   32
+#define VP_MAX_SHADOW 16
+#define VP_MAX_QUEUE  128
+
+typedef struct {
+    char name[16];              /* "X86VMS" */
+    char version[12];           /* "V9.2-3" */
+    int votes;
+    int self;                   /* this node */
+} vp_node;
+
+typedef struct {
+    char name[VP_NAME];         /* "DSA1:" */
+    int members;                /* full members */
+    int devices;                /* members and copy targets */
+    int copy, merge;            /* % done of a copy or merge under way; -1 none */
+} vp_shadow;
+
+enum { VP_QK_BATCH, VP_QK_PRINT, VP_QK_SERVER, VP_QK_TERMINAL, VP_QK_GENERIC };
+
+/* queue states: VMS's QUI$M_QUEUE_ status bits, as our own */
+enum {
+    VP_QS_IDLE = 1, VP_QS_BUSY = 2, VP_QS_STOPPED = 4, VP_QS_STOPPING = 8,
+    VP_QS_STALLED = 16, VP_QS_PAUSED = 32, VP_QS_PAUSING = 64, VP_QS_UNAVAILABLE = 128,
+    VP_QS_DISABLED = 256, VP_QS_CLOSED = 512, VP_QS_STARTING = 1024,
+    VP_QS_RESETTING = 2048, VP_QS_RESUMING = 4096, VP_QS_ALIGNING = 8192
+};
+
+typedef struct {
+    char name[32];
+    int kind;                   /* VP_QK_* */
+    unsigned status;            /* VP_QS_* */
+    int exec, limit, pend, hold, timed;
+} vp_queue;
+
+typedef struct {
+    int cluster;                /* a cluster member */
+    int nodes, votes, quorum;   /* the cluster's */
+    int nnode;
+    vp_node node[VP_MAX_NODE];
+    int nshadow;
+    vp_shadow shadow[VP_MAX_SHADOW];
+    int queues_ok;              /* 0: the queue manager didn't answer (queue_err) */
+    char queue_err[96];
+    int nqueue, queue_total;    /* queue_total: more than fitted? */
+    vp_queue queue[VP_MAX_QUEUE];
+} vp_vms;
+
 /* process actions (D4) */
 enum { VP_ACT_NONE, VP_ACT_SUSPEND, VP_ACT_RESUME, VP_ACT_DELETE, VP_ACT_PRIORITY };
 

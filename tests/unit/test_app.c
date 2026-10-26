@@ -99,6 +99,47 @@ static void world(int ncpu)
     scan.self = 0x20200160;
 }
 
+/* the vms panel's figures (D9): like the nodes (standalone, 7 queues), or a cluster
+   with shadow sets and a queue in trouble */
+static vp_vms vms;
+
+static void queue(const char *name, int kind, unsigned status, int exec, int limit,
+                  int pend, int hold, int timed)
+{
+    vp_queue *q = &vms.queue[vms.nqueue++];
+    memset(q, 0, sizeof *q);
+    strcpy(q->name, name);
+    q->kind = kind; q->status = status;
+    q->exec = exec; q->limit = limit; q->pend = pend; q->hold = hold; q->timed = timed;
+    vms.queue_total = vms.nqueue;
+}
+
+static void vms_world(int cluster)
+{
+    memset(&vms, 0, sizeof vms);
+    vms.queues_ok = 1;
+    queue("LPD_TS7500I", VP_QK_SERVER, VP_QS_IDLE, 0, 1, 0, 0, 0);
+    queue("SYS$BATCH", VP_QK_GENERIC, VP_QS_IDLE, 0, 1, 0, 0, 3);
+    queue("TCPIP$LPD_IN", VP_QK_GENERIC, VP_QS_IDLE, 0, 1, 0, 0, 0);
+    queue("TCPIP$LPD_IN_X86VMS_1", VP_QK_SERVER, VP_QS_IDLE, 0, 1, 0, 0, 0);
+    queue("TCPIP$SMTP", VP_QK_GENERIC, VP_QS_IDLE, 0, 1, 0, 0, 0);
+    queue("TCPIP$SMTP_X86VMS_1", VP_QK_SERVER, VP_QS_IDLE, 0, 1, 0, 0, 0);
+    queue("X86VMS_BATCH", VP_QK_BATCH, VP_QS_IDLE, 0, 4, 0, 0, 0);
+    if (!cluster) return;
+    vms.cluster = 1; vms.nodes = 3; vms.votes = 3; vms.quorum = 2; vms.nnode = 3;
+    strcpy(vms.node[0].name, "MYI64"); strcpy(vms.node[0].version, "V8.4-2L3"); vms.node[0].votes = 1;
+    strcpy(vms.node[1].name, "X86VMS"); strcpy(vms.node[1].version, "E9.2-4"); vms.node[1].votes = 1;
+    vms.node[1].self = 1;
+    strcpy(vms.node[2].name, "QUORUM"); strcpy(vms.node[2].version, "V9.2-3"); vms.node[2].votes = 1;
+    vms.nshadow = 2;
+    strcpy(vms.shadow[0].name, "DSA1:"); vms.shadow[0].members = 2; vms.shadow[0].devices = 2;
+    vms.shadow[0].copy = vms.shadow[0].merge = -1;
+    strcpy(vms.shadow[1].name, "DSA2:"); vms.shadow[1].members = 1; vms.shadow[1].devices = 2;
+    vms.shadow[1].copy = 45; vms.shadow[1].merge = -1;
+    vms.queue[6].status = VP_QS_BUSY; vms.queue[6].exec = 2; vms.queue[6].pend = 5;
+    vms.queue[0].status = VP_QS_STOPPED;
+}
+
 /* n samples 2 s apart, CPU load rising and falling, a burst of network traffic */
 static void run(int n)
 {
@@ -169,10 +210,13 @@ int main(void)
     run(10);
     snap("06_message_gone");
 
-    /* a big screen with many CPUs */
+    /* a big screen with many CPUs: the vms panel shows too (40 rows) */
     world(24);
     vp_app_resize(&app, 40, 132);
     run(120);
+    CHECK(vp_app_panel(&app) == VP_P_BOTH && vp_app_shows_vms(&app));
+    vms_world(0);
+    vp_app_vms(&app, &vms);
     snap("07_24cpu_132x40");
 
     /* the process list (D8) */
@@ -288,6 +332,64 @@ int main(void)
     snap("15_help");
     vp_app_key(&app, 'x');
     CHECK(!app.help && !app.quit);
+
+    /* the vms panel (D9) at 80x24: v steps net, vms, both */
+    world(2);
+    run(30);
+    CHECK(vp_app_panel(&app) == VP_P_NET && !vp_app_shows_vms(&app));
+    vp_app_key(&app, 'v');
+    CHECK(vp_app_panel(&app) == VP_P_VMS && app.vms_want);
+    snap("16_vms_reading");
+    vms_world(0);
+    vp_app_vms(&app, &vms);
+    CHECK(!app.vms_want && app.have_vms);
+    snap("17_vms_80x24");
+    vp_app_key(&app, 'v');
+    CHECK(vp_app_panel(&app) == VP_P_BOTH);
+    snap("18_both_80x24");
+    vp_app_key(&app, 'v');
+    CHECK(vp_app_panel(&app) == VP_P_NET);
+    vp_app_resize(&app, 20, 80);            /* no room for both: vms, then net */
+    vp_app_key(&app, 'v'); vp_app_key(&app, 'v');
+    CHECK(vp_app_panel(&app) == VP_P_NET);
+    app.panel = VP_P_BOTH;                  /* from a file written on a bigger screen */
+    CHECK(vp_app_panel(&app) == VP_P_NET);
+    /* a cluster, shadow sets, a stopped and a busy queue, on a wide screen */
+    vp_app_resize(&app, 44, 132);
+    vms_world(1);
+    vp_app_vms(&app, &vms);
+    CHECK(!strcmp(app.vms.queue[app.vms_order[0]].name, "LPD_TS7500I"));   /* stopped first */
+    CHECK(!strcmp(app.vms.queue[app.vms_order[1]].name, "SYS$BATCH"));     /* then with jobs */
+    CHECK(!strcmp(app.vms.queue[app.vms_order[2]].name, "X86VMS_BATCH"));
+    run(5);
+    snap("19_cluster_132x44");
+    vms.quorum = 4;
+    vms.queues_ok = 0;
+    strcpy(vms.queue_err, "%JBC-E-NOQUEMGR, queue manager not running");
+    vp_app_vms(&app, &vms);
+    snap("20_no_queue_manager");
+
+    /* the options file (D10): applied, and read back for w */
+    {
+        vp_opts o;
+        vp_opts_init(&o);
+        o.sort = VP_S_MEM; o.tree = 1; o.panel = VP_P_VMS; o.interval = 5;
+        strcpy(o.network, "ewb0");
+        world(2);
+        vp_app_apply(&app, &o);
+        CHECK(app.sort == VP_S_MEM && app.tree && app.panel == VP_P_VMS && app.interval == 5);
+        CHECK(app.graph == VP_G_BRAILLE);   /* not given: left alone */
+        run(1);
+        CHECK(app.nic == 1 && !app.want_nic[0]);
+        vp_app_key(&app, 'w');
+        CHECK(app.save);
+        vp_app_options(&app, &o);
+        CHECK(o.sort == VP_S_MEM && o.tree == 1 && o.reverse == 0 && o.panel == VP_P_VMS
+              && !strcmp(o.network, "EWB0") && o.graph == VP_G_BRAILLE);
+        CHECK(!app.graph_chosen);
+        vp_app_key(&app, 'g');
+        CHECK(app.graph_chosen);
+    }
 
     /* too small */
     vp_app_resize(&app, 18, 60);

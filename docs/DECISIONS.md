@@ -89,3 +89,41 @@ colours; the bright half (SGR 90-97) is not known to DECterm, so it is 8.
   user and image, typeahead is thrown away first, `Y` alone confirms, and the action
   goes to that PID. VTOP refuses to suspend or delete its own process.
 - The selection follows the PID across scans and re-sorts, not the line.
+
+## D9. The vms panel (2026-10-26, Phase 3; signed off by the user at the exit)
+
+What only VMS has, read without privilege (D5, N10): the cluster, shadow sets and
+queues. Page and swap files stay as the totals in the mem panel: per-file figures
+need privilege (`SHOW MEMORY/FILES` has it, `SYI$_PAGFILCNT` reads 0 without).
+
+- **Where**: the bottom-left slot shows the net panel, the vms panel, or both stacked.
+  `v` steps net, vms, both. Unless the options file says otherwise, both when the
+  screen has 40 rows or more, else net (at 80x24 the slot has 4 lines inside).
+- **Title**: "standalone", or "cluster N nodes" with the votes and quorum (votes below
+  quorum in warning colour).
+- **Lines**, in this order, as many as fit, each with "+N more" when cut:
+  cluster members (name, version, votes; this node bold), shadow sets (virtual unit,
+  members, "steady", or "copying 45%" / "merging 12%" in warning colour), then a
+  "queues" divider with the queue and job counts and one line per queue: name, kind
+  (wide panels only), state, run (executing/limit), pend, hold (holding + timed
+  release).
+- **Queue order**: queues that need someone first (stopped, stalled, paused,
+  unavailable, disabled, closed, stopping), then queues with jobs or busy, then the
+  rest, by name within each. Problem states in warning colour.
+- **Cost**: one wildcard `$GETQUI`, a `$GETSYI` node pass and a `$GETDVI` per shadow
+  set per sample, only while the panel shows (a queue pass is 0.5-2 ms, N10).
+
+## D10. The options file (2026-10-26, Phase 3; signed off by the user at the exit)
+
+- `SYS$LOGIN:VTOP.INI`, or the file the logical name `VTOP$OPTIONS` names (tests use
+  this, so they never touch the user's file). Lines `name = value`, `!` or `#`
+  comments, names and values any case.
+- Options: `graph`, `colour`, `interval`, `sort` (pid name user state pri cpu time
+  mem dio bio image), `reverse`, `tree` (yes/no), `panel` (net vms both auto),
+  `network` (a device name).
+- Precedence: qualifier, then logical name (`VTOP$GRAPH`, `VTOP$COLOUR`), then the
+  file, then what VTOP detects. A bad line is skipped and named in the status line.
+- VTOP writes the file only when you press `w` (a new version, each time; nothing is
+  saved on exit). `graph` and `colour` are written only if they were chosen in this
+  session (qualifier or `g`/`c`); otherwise what the file had is kept, so saving from
+  an xterm doesn't put braille on a VT520 next time.

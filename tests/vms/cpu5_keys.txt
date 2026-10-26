@@ -1,0 +1,10 @@
+# PTYDRIVE script: VTOP's own CPU time over 20 s at /INTERVAL=1 with the vms panel
+# showing (a $GETQUI pass per sample), and the queue manager's, before and after.
+2 symbol | vtop :== $'f$parse("[.build]vtop.exe")'\r
+2 qm_before | @[.tests.vms]qman_cpu\r
+2 before | show process/accounting\r
+1 start | vtop /graph=vt /interval=1\r
+20 run | v
+2 quit | q
+2 after | show process/accounting\r
+2 qm_after | @[.tests.vms]qman_cpu\r

@@ -4,27 +4,27 @@
 │                                                                                   ⢠⣿│ CPU1  ■■■■■■■■■■  93%│
 │                                                                                  ⢠⣿⣿│                      │
 │                                                                                 ⢠⣿⣿⣿│                      │
-│                                                                                ⢠⣿⣿⣿⣿│                      │
 │                         ╭─ keys ─────────────────────────────────────────────────╮⣿⣿│                      │
-│ user 47%  super 0%  exec│ q  F10  Ctrl/Z     quit (Ctrl/C and Ctrl/Y too)        │  │ load 0.4  procs 46   │
-╰─────────────────────────│ + -                refresh interval, 1 to 10 seconds   │──┴──────────────────────╯
-╭─ mem ─ 8.0G ────────────│ g                  graphs: braille, block or VT        │─────────────────────────╮
-│Used       2.8G  35% ■■■■│ c                  colours: 24-bit, 256, 8 or mono     │     St     CPU%   Mem   │
-│Free       5.0G  62% ■■■■│ b n                the network device shown            │     CUR      45   13M   │
-│Modified   200M   2% ■■■■│ Ctrl/W             measure the terminal and redraw     │     LEF      10  7.0M   │
-│Page       148M   7% ■■■■│ Up Down Prev Next  select a process                    │     CUR     0.5   22M   │
-│Swap         0B   0% ■■■■│ < > Left Right     sort column;  r  reverses it        │     HIB     0.0  4.0M   │
-├─ disks ─────────────────│ t                  tree by owner process               │     LEF     0.0   10M   │
-│DKA0:    X86SYS        55│ /  f               filter: name, user, image or PID    │     HIB     0.0   16M   │
-│DKA200:  TOOLS         42│ i  Return          details of the process              │     SUSP    0.0   19M   │
-│DKA300:  MNTVER        77│ S  R               suspend, resume (asks first)        │                         │
-│                         │ D  P               delete, set priority (asks first)   │                         │
-╰─────────────────────────│ h  ?  Help         this list; any key closes it        │                         │
-╭─ net ─ EWA0 ────────────╰────────────────────────────────────────────────────────╯                         │
-│                             ⢀⣾ ▼ 1.3M/s       ││                                                           │
+│                         │ q  F10  Ctrl/Z     quit (Ctrl/C and Ctrl/Y too)        │⣿⣿│                      │
+│ user 47%  super 0%  exec│ + -                refresh interval, 1 to 10 seconds   │  │ load 0.4  procs 46   │
+╰─────────────────────────│ g                  graphs: braille, block or VT        │──┴──────────────────────╯
+╭─ mem ─ 8.0G ────────────│ c                  colours: 24-bit, 256, 8 or mono     │─────────────────────────╮
+│Used       2.8G  35% ■■■■│ b n                the network device shown            │     St     CPU%   Mem   │
+│Free       5.0G  62% ■■■■│ v                  net, vms (queues, cluster) or both  │     CUR      45   13M   │
+│Modified   200M   2% ■■■■│ w                  save these settings (VTOP.INI)      │     LEF      10  7.0M   │
+│Page       148M   7% ■■■■│ Ctrl/W             measure the terminal and redraw     │     CUR     0.5   22M   │
+│Swap         0B   0% ■■■■│ Up Down Prev Next  select a process                    │     HIB     0.0  4.0M   │
+├─ disks ─────────────────│ < > Left Right     sort column;  r  reverses it        │     LEF     0.0   10M   │
+│DKA0:    X86SYS        55│ t                  tree by owner process               │     HIB     0.0   16M   │
+│DKA200:  TOOLS         42│ /  f               filter: name, user, image or PID    │     SUSP    0.0   19M   │
+│DKA300:  MNTVER        77│ i  Return          details of the process              │                         │
+│                         │ S  R               suspend, resume (asks first)        │                         │
+╰─────────────────────────│ D  P               delete, set priority (asks first)   │                         │
+╭─ net ─ EWA0 ────────────│ h  ?  Help         this list; any key closes it        │                         │
+│                         ╰────────────────────────────────────────────────────────╯                         │
 │                            ⣰⣿⣿                ││                                                           │
 │                          ⢀⣾⣿⣿⣿                ││                                                           │
 │                          ⢸⣿⡇⠙⢿                ││                                                           │
 │                          ⠈⠻⡇   ▲ 39K/s        ││                                                           │
 ╰───────────────────────────────────────────────╯╰─ < > CPU% high  / filter  t tree  i info  S R D P act ────╯
- q quit  h help  +- interval 2s  g graph BRAILLE  c colour 24  b n network                         VTOP 0.1.0
+ q quit  h help  +- interval 2s  g graph BRAILLE  c colour 24  v vms  b n network                  VTOP 0.1.0

@@ -21,4 +21,4 @@
 │⢸⣿⡇⠙⢿⣿⣿⡇⠙⢿⣿⣿⡇⠙⢿⣿⣿⡇⠙⢿                ││                                        │
 │⠈⠻⡇  ⠈⠻⡇  ⠈⠻⡇  ⠈⠻⡇   ▲ 39K/s        ││                                        │
 ╰────────────────────────────────────╯╰─ < > CPU% high  / filter  t tree ──────╯
- q quit  h help  +- interval 2s  g graph BRAILLE  c colour 24  b n network
+ q quit  h help  +- interval 2s  g graph BRAILLE  c colour 24  v vms

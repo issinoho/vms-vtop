@@ -383,3 +383,79 @@ void vpp_flush_keys(void)
 {
     while (read_byte(0) >= 0) ;
 }
+
+/* the vms panel (D9): a three-node cluster, one shadow set copying slowly, and
+   queues whose batch queue fills and empties */
+static void stub_queue(vp_vms *v, const char *name, int kind, unsigned status, int exec,
+                       int limit, int pend, int hold, int timed)
+{
+    vp_queue *q = &v->queue[v->nqueue++];
+    vp_strlcpy(q->name, name, sizeof q->name);
+    q->kind = kind; q->status = status;
+    q->exec = exec; q->limit = limit; q->pend = pend; q->hold = hold; q->timed = timed;
+}
+
+int vpp_vms(vp_vms *v)
+{
+    uint64_t secs = vpp_now_ms() / 1000u;
+    int busy = (int) (secs / 7 % 4);
+    memset(v, 0, sizeof *v);
+    v->cluster = 1; v->nodes = 3; v->votes = 3; v->quorum = 2; v->nnode = 3;
+    vp_strlcpy(v->node[0].name, "X86VMS", sizeof v->node[0].name);
+    vp_strlcpy(v->node[0].version, "E9.2-4", sizeof v->node[0].version);
+    v->node[0].votes = 1; v->node[0].self = 1;
+    vp_strlcpy(v->node[1].name, "MYI64", sizeof v->node[1].name);
+    vp_strlcpy(v->node[1].version, "V8.4-2L3", sizeof v->node[1].version);
+    v->node[1].votes = 1;
+    vp_strlcpy(v->node[2].name, "QUORUM", sizeof v->node[2].name);
+    vp_strlcpy(v->node[2].version, "V9.2-3", sizeof v->node[2].version);
+    v->node[2].votes = 1;
+    v->nshadow = 2;
+    vp_strlcpy(v->shadow[0].name, "DSA1:", sizeof v->shadow[0].name);
+    v->shadow[0].members = v->shadow[0].devices = 2;
+    v->shadow[0].copy = v->shadow[0].merge = -1;
+    vp_strlcpy(v->shadow[1].name, "DSA2:", sizeof v->shadow[1].name);
+    v->shadow[1].members = 1; v->shadow[1].devices = 2;
+    v->shadow[1].copy = (int) (secs % 100); v->shadow[1].merge = -1;
+    v->queues_ok = 1;
+    stub_queue(v, "LPD_TS7500I", VP_QK_SERVER, VP_QS_STOPPED, 0, 1, 0, 0, 0);
+    stub_queue(v, "SYS$BATCH", VP_QK_GENERIC, VP_QS_IDLE, 0, 1, 0, 0, 3);
+    stub_queue(v, "SYS$PRINT", VP_QK_GENERIC, VP_QS_IDLE, 0, 1, 0, 0, 0);
+    stub_queue(v, "TCPIP$SMTP_X86VMS_1", VP_QK_SERVER, VP_QS_IDLE, 0, 1, 0, 0, 0);
+    stub_queue(v, "X86VMS_BATCH", VP_QK_BATCH, busy ? VP_QS_BUSY : VP_QS_IDLE, busy, 4,
+               busy > 2 ? 2 : 0, 0, 0);
+    stub_queue(v, "X86VMS_PRINT", VP_QK_PRINT, VP_QS_IDLE, 0, 1, 0, 1, 0);
+    v->queue_total = v->nqueue;
+    return 1;
+}
+
+/* the options file (D10): ~/.vtop.ini here */
+void vpp_options_default(char *name, int size)
+{
+    const char *home = getenv("HOME");
+    snprintf(name, (size_t) size, "%s/.vtop.ini", home ? home : ".");
+}
+
+int vpp_read_file(const char *name, char *buf, int size)
+{
+    FILE *f = fopen(name, "r");
+    size_t n;
+    if (!f) return -1;
+    n = fread(buf, 1, (size_t) size - 1, f);
+    buf[n] = '\0';
+    fclose(f);
+    return (int) n;
+}
+
+int vpp_write_file(const char *name, const char *text, char *msg, int msgsize)
+{
+    FILE *f = fopen(name, "w");
+    if (!f || fputs(text, f) < 0) {
+        snprintf(msg, (size_t) msgsize, "can't write %s", name);
+        if (f) fclose(f);
+        return 0;
+    }
+    if (fclose(f) != 0) { snprintf(msg, (size_t) msgsize, "can't write %s", name); return 0; }
+    vp_strlcpy(msg, name, (size_t) msgsize);
+    return 1;
+}

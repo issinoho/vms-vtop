@@ -6,6 +6,6 @@ history graphs, and a sortable process list you can act on, plus what only VMS h
 (processor modes, page and swap files, shadow sets, queues, the cluster).
 
 Not a port: btop needs C++20, which neither VMS compiler has. VTOP is new C code that
-borrows btop's ideas. Status: Phase 0 (probes); see [docs/PLAN.md](docs/PLAN.md).
+borrows btop's ideas. Status: Phase 3 (the vms panel and an options file); see [docs/PLAN.md](docs/PLAN.md).
 
 MIT licence.

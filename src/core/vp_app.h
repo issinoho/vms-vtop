@@ -7,6 +7,8 @@
 #include "vp_screen.h"
 #include "vp_model.h"
 #include "vp_procs.h"
+#include "vp_opts.h"
+#include "vp_vms.h"
 
 #define VP_VERSION "0.1.0"
 #define VP_MIN_ROWS 20
@@ -17,7 +19,8 @@
 typedef struct { int r1, c1, r2, c2; } vp_rect;
 
 typedef struct {
-    vp_rect cpu, mem, net, proc;
+    vp_rect cpu, mem, net, vms, proc;
+    int show_net, show_vms;     /* the bottom-left slot (D9) */
     int status_row;
 } vp_layout;
 
@@ -65,6 +68,18 @@ typedef struct {
     int det_ok;
     vp_proc_detail det;
     char det_err[160];
+
+    /* the vms panel (D9): the main loop reads vms while it shows, at once when
+       vms_want is set */
+    int panel;                  /* VP_P_*, AUTO until v is pressed */
+    int have_vms, vms_want;
+    vp_vms vms;
+    int vms_order[VP_MAX_QUEUE];
+
+    /* the options file (D10) */
+    int save;                   /* w was pressed: the main loop writes the file */
+    int graph_chosen, colour_chosen;    /* by g or c (or a qualifier) in this session */
+    char want_nic[VP_NAME];     /* from the file: the NIC to show once it is seen */
 } vp_app;
 
 int  vp_app_init(vp_app *a, int rows, int cols, const vp_identity *id);  /* 0: no memory */
@@ -82,7 +97,17 @@ void vp_app_detail(vp_app *a, int ok, const vp_proc_detail *d, const char *err);
 void vp_app_action_done(vp_app *a, int ok, const char *msg);
 void vp_app_draw(vp_app *a);
 
-void vp_layout_for(int rows, int cols, vp_layout *l);
+/* the vms panel */
+int  vp_app_panel(const vp_app *a);         /* what the slot shows now: NET, VMS or BOTH */
+int  vp_app_shows_vms(const vp_app *a);
+void vp_app_vms(vp_app *a, const vp_vms *v);
+/* the options file: settings in, and the settings now (all of them) out */
+void vp_app_apply(vp_app *a, const vp_opts *o);
+void vp_app_options(const vp_app *a, vp_opts *o);
+
+/* panel: VP_P_NET, VMS or BOTH (as vp_app_panel gives it) */
+void vp_layout_for(int rows, int cols, int panel, vp_layout *l);
+int  vp_layout_fits_both(int rows);
 const char *vp_graph_name(int g);
 const char *vp_colour_name(int c);
 /* "BRAILLE", "block", "VT", ... -> VP_G_*; -1 if none */

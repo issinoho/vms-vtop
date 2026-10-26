@@ -11,6 +11,7 @@ enum {
     VP_K_METER_OFF,         /* the unfilled part of a meter */
     VP_K_RX, VP_K_TX,
     VP_K_STATUS_BG,
+    VP_K_VMS_BOX,
     VP_K_GRAD = 16,         /* VP_GRAD steps, green - yellow - red */
     VP_K_NETGRAD = VP_K_GRAD + 32,  /* VP_GRAD steps for the network graphs */
     VP_NPAL = VP_K_NETGRAD + 32

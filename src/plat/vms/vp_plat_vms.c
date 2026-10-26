@@ -12,6 +12,7 @@
      $GETRMI   CPU mode times per CPU (RMI$_MODES), free/modified lists, processes
      $GETDVI   mounted disks: size, free, errors, state, operation count (N4)
      $GETJPI   the process list and one process's details (N1, N2)
+     $GETQUI   every queue's state and job counts (the vms panel, D9, N10)
      $QIO      LAN read-counters on each LAN device's unit 0 (beszel N12-13);
                once a 32-bit counter sticks at 4 GiB, LANCP's 64-bit figures
 
@@ -29,8 +30,10 @@
 #include <dvsdef.h>
 #include <efndef.h>
 #include <iodef.h>
+#include <jbcmsgdef.h>
 #include <jpidef.h>
 #include <prvdef.h>
+#include <quidef.h>
 #include <libclidef.h>
 #include <lnmdef.h>
 #include <nmadef.h>
@@ -1035,4 +1038,256 @@ void vpp_flush_keys(void)
 {
     int n = 0;
     while (started && n++ < 512 && vpp_key(0) != VK_TIMEOUT) ;
+}
+
+/* ---------- the vms panel (D9, N10) ---------- */
+
+static void cluster_info(vp_vms *v)
+{
+    unsigned int member = 0, votes = 0, quorum = 0, nodes = 0, csid = 0xFFFFFFFFu;
+    char self[16];
+    unsigned short sl = 0;
+    struct item il[6];
+    struct iosb iosb;
+    memset(il, 0, sizeof il);
+    set_item(&il[0], SYI$_CLUSTER_MEMBER, &member, 4, 0);
+    set_item(&il[1], SYI$_CLUSTER_VOTES, &votes, 4, 0);
+    set_item(&il[2], SYI$_CLUSTER_QUORUM, &quorum, 4, 0);
+    set_item(&il[3], SYI$_CLUSTER_NODES, &nodes, 4, 0);
+    set_item(&il[4], SYI$_NODENAME, self, sizeof self - 1, &sl);
+    if (!(sys$getsyiw(EFN$C_ENF, 0, 0, il, (void *) &iosb, 0, 0) & 1) || !(iosb.st & 1)) return;
+    self[sl] = '\0';
+    v->cluster = (member & 0xFF) != 0;      /* a byte item */
+    if (!v->cluster) return;
+    v->votes = (int) votes;
+    v->quorum = (int) quorum;
+    v->nodes = (int) nodes;
+    /* every member, this one included; csid -1 starts the wildcard (N10) */
+    while (v->nnode < VP_MAX_NODE) {
+        vp_node *nd = &v->node[v->nnode];
+        char name[16], ver[9];
+        unsigned short nl = 0, vl = 0;
+        unsigned int nv = 0;
+        int st;
+        memset(il, 0, sizeof il);
+        set_item(&il[0], SYI$_NODENAME, name, sizeof name - 1, &nl);
+        set_item(&il[1], SYI$_NODE_SWVERS, ver, 8, &vl);
+        set_item(&il[2], SYI$_NODE_VOTES, &nv, 4, 0);
+        st = sys$getsyiw(EFN$C_ENF, &csid, 0, il, (void *) &iosb, 0, 0);
+        if (!(st & 1) || !(iosb.st & 1)) break;         /* SS$_NOMORENODE */
+        name[nl] = '\0';
+        ver[vl] = '\0';
+        trim(ver);
+        memset(nd, 0, sizeof *nd);
+        vp_strlcpy(nd->name, name, sizeof nd->name);
+        vp_strlcpy(nd->version, ver, sizeof nd->version);
+        nd->votes = (int) nv;
+        nd->self = !strcmp(name, self);
+        v->nnode++;
+    }
+}
+
+/* one shadow device's items; 0 if it didn't answer */
+static int shdw_dvi(const char *name, unsigned short nl, unsigned int *master,
+                    unsigned int *mbrs, unsigned int *devs, unsigned int *copying,
+                    unsigned int *merging, unsigned int *cdone, unsigned int *mdone,
+                    char *next, unsigned short *nextl)
+{
+    struct dsc$descriptor_s d;
+    struct item il[10];
+    struct iosb iosb;
+    dsc(&d, name, nl);
+    memset(il, 0, sizeof il);
+    set_item(&il[0], DVI$_SHDW_MASTER, master, 4, 0);
+    set_item(&il[1], DVI$_SHDW_MBR_COUNT, mbrs, 4, 0);
+    set_item(&il[2], DVI$_SHDW_DEVICE_COUNT, devs, 4, 0);
+    set_item(&il[3], DVI$_SHDW_CATCHUP_COPYING, copying, 4, 0);
+    set_item(&il[4], DVI$_SHDW_MERGE_COPYING, merging, 4, 0);
+    set_item(&il[5], DVI$_SHDW_MBR_COPY_DONE, cdone, 4, 0);
+    set_item(&il[6], DVI$_SHDW_MBR_MERGE_DONE, mdone, 4, 0);
+    set_item(&il[7], DVI$_SHDW_NEXT_MBR_NAME, next, 64, nextl);
+    *master = *mbrs = *devs = *copying = *merging = *cdone = *mdone = 0;
+    *nextl = 0;
+    return (sys$getdviw(EFN$C_ENF, 0, &d, il, (void *) &iosb, 0, 0, 0) & 1) && (iosb.st & 1);
+}
+
+/* each virtual unit, and the least done of any copy or merge on its members */
+static void shadow_sets(vp_vms *v)
+{
+    char name[65];
+    struct dsc$descriptor_s nd, pat;
+    unsigned short nl = 0;
+    uint64_t ctx = 0;
+    int devclass = DC$_DISK;
+    struct item scan[2];
+    memset(scan, 0, sizeof scan);
+    set_item(&scan[0], DVS$_DEVCLASS, &devclass, 4, 0);
+    dsc(&pat, "DSA*", 4);
+    while (v->nshadow < VP_MAX_SHADOW) {
+        unsigned int master, mbrs, devs, cp, mg, cd, md;
+        char next[65];
+        unsigned short xl;
+        vp_shadow *sh = &v->shadow[v->nshadow];
+        int k;
+        dsc(&nd, name, 64);
+        if (!(sys$device_scan(&nd, &nl, &pat, scan, (void *) &ctx) & 1)) break;
+        if (!shdw_dvi(name, nl, &master, &mbrs, &devs, &cp, &mg, &cd, &md, next, &xl) || !master)
+            continue;
+        name[nl] = '\0';
+        memset(sh, 0, sizeof *sh);
+        clean_dev(sh->name, sizeof sh->name, name, 1);
+        sh->members = (int) mbrs;
+        sh->devices = (int) devs;
+        sh->copy = sh->merge = -1;
+        /* the members, from the virtual unit's first; a few at most */
+        for (k = 0; k < 8 && xl; k++) {
+            char mname[65];
+            unsigned short ml = xl;
+            unsigned int m2, b2, d2;
+            memcpy(mname, next, xl);
+            if (!shdw_dvi(mname, ml, &m2, &b2, &d2, &cp, &mg, &cd, &md, next, &xl)) break;
+            if (cp && (sh->copy < 0 || (int) cd < sh->copy)) sh->copy = (int) cd;
+            if (mg && (sh->merge < 0 || (int) md < sh->merge)) sh->merge = (int) md;
+        }
+        if (sh->copy > 100) sh->copy = 100;
+        if (sh->merge > 100) sh->merge = 100;
+        v->nshadow++;
+    }
+}
+
+/* QUI$M_QUEUE_ status bits to ours (N10: these are the status set, not the flags) */
+static unsigned queue_status(unsigned int st)
+{
+    static const struct { unsigned int qui; unsigned vp; } map[] = {
+        { QUI$M_QUEUE_IDLE, VP_QS_IDLE }, { QUI$M_QUEUE_BUSY, VP_QS_BUSY },
+        { QUI$M_QUEUE_STOPPED, VP_QS_STOPPED }, { QUI$M_QUEUE_STOPPING, VP_QS_STOPPING },
+        { QUI$M_QUEUE_STALLED, VP_QS_STALLED }, { QUI$M_QUEUE_PAUSED, VP_QS_PAUSED },
+        { QUI$M_QUEUE_PAUSING, VP_QS_PAUSING }, { QUI$M_QUEUE_UNAVAILABLE, VP_QS_UNAVAILABLE },
+        { QUI$M_QUEUE_DISABLED, VP_QS_DISABLED }, { QUI$M_QUEUE_CLOSED, VP_QS_CLOSED },
+        { QUI$M_QUEUE_STARTING, VP_QS_STARTING }, { QUI$M_QUEUE_RESETTING, VP_QS_RESETTING },
+        { QUI$M_QUEUE_RESUMING, VP_QS_RESUMING }, { QUI$M_QUEUE_ALIGNING, VP_QS_ALIGNING },
+    };
+    unsigned vp = 0;
+    size_t i;
+    for (i = 0; i < sizeof map / sizeof map[0]; i++) if (st & map[i].qui) vp |= map[i].vp;
+    return vp;
+}
+
+static int queue_kind(unsigned int flags)
+{
+    if (flags & QUI$M_QUEUE_GENERIC) return VP_QK_GENERIC;
+    if (flags & QUI$M_QUEUE_BATCH) return VP_QK_BATCH;
+    if (flags & QUI$M_QUEUE_TERMINAL) return VP_QK_TERMINAL;
+    if (flags & QUI$M_QUEUE_PRINTER) return VP_QK_PRINT;
+    return VP_QK_SERVER;
+}
+
+/* $GETQUI's IOSB holds a longword status (N10) */
+struct qiosb { unsigned int st, spare; };
+
+static void queues(vp_vms *v)
+{
+    unsigned int ctx = 0xFFFFFFFFu, sflags = QUI$M_SEARCH_WILDCARD, st;
+    struct qiosb iosb;
+    char pat[] = "*";
+    v->queues_ok = 1;
+    for (;;) {
+        struct item il[12];
+        vp_queue q;
+        char name[32];
+        unsigned short nl = 0;
+        unsigned int status = 0, flags = 0, ex = 0, pe = 0, ho = 0, ti = 0, lim = 0;
+        memset(il, 0, sizeof il);
+        set_item(&il[0], QUI$_SEARCH_NAME, pat, 1, 0);
+        set_item(&il[1], QUI$_SEARCH_FLAGS, &sflags, 4, 0);
+        set_item(&il[2], QUI$_QUEUE_NAME, name, sizeof name - 1, &nl);
+        set_item(&il[3], QUI$_QUEUE_STATUS, &status, 4, 0);
+        set_item(&il[4], QUI$_QUEUE_FLAGS, &flags, 4, 0);
+        set_item(&il[5], QUI$_EXECUTING_JOB_COUNT, &ex, 4, 0);
+        set_item(&il[6], QUI$_PENDING_JOB_COUNT, &pe, 4, 0);
+        set_item(&il[7], QUI$_HOLDING_JOB_COUNT, &ho, 4, 0);
+        set_item(&il[8], QUI$_TIMED_RELEASE_JOB_COUNT, &ti, 4, 0);
+        set_item(&il[9], QUI$_JOB_LIMIT, &lim, 4, 0);
+        st = sys$getquiw(EFN$C_ENF, QUI$_DISPLAY_QUEUE, &ctx, il, (void *) &iosb, 0, 0);
+        if (st & 1) st = iosb.st;
+        if (!(st & 1)) {
+            if (st != JBC$_NOMOREQUE && st != JBC$_NOSUCHQUE && v->queue_total == 0) {
+                v->queues_ok = 0;
+                status_text(st, v->queue_err, sizeof v->queue_err);
+            }
+            break;
+        }
+        v->queue_total++;
+        if (v->nqueue >= VP_MAX_QUEUE) continue;
+        name[nl] = '\0';
+        memset(&q, 0, sizeof q);
+        vp_strlcpy(q.name, name, sizeof q.name);
+        q.kind = queue_kind(flags);
+        q.status = queue_status(status);
+        q.exec = (int) ex; q.pend = (int) pe; q.hold = (int) ho; q.timed = (int) ti;
+        q.limit = (int) lim;
+        v->queue[v->nqueue++] = q;
+    }
+    sys$getquiw(EFN$C_ENF, QUI$_CANCEL_OPERATION, &ctx, 0, (void *) &iosb, 0, 0);
+}
+
+int vpp_vms(vp_vms *v)
+{
+    memset(v, 0, sizeof *v);
+    cluster_info(v);
+    shadow_sets(v);
+    queues(v);
+    return 1;
+}
+
+/* ---------- the options file (D10) ---------- */
+
+void vpp_options_default(char *name, int size)
+{
+    vp_strlcpy(name, "SYS$LOGIN:VTOP.INI", (size_t) size);
+}
+
+int vpp_read_file(const char *name, char *buf, int size)
+{
+    FILE *f = fopen(name, "r");
+    size_t n;
+    if (!f) return -1;
+    n = fread(buf, 1, (size_t) size - 1, f);
+    buf[n] = '\0';
+    fclose(f);
+    return (int) n;
+}
+
+/* the full name of what is there now: the version just written */
+static void found_name(const char *name, char *out, int size)
+{
+    struct dsc$descriptor_s spec, res;
+    char buf[256];
+    unsigned int ctx = 0;
+    int i;
+    dsc(&spec, name, (unsigned short) strlen(name));
+    dsc(&res, buf, sizeof buf - 1);
+    if (lib$find_file(&spec, &res, &ctx, 0, 0, 0, 0) & 1) {
+        buf[sizeof buf - 1] = '\0';
+        for (i = (int) sizeof buf - 2; i >= 0 && buf[i] == ' '; i--) buf[i] = '\0';
+        vp_strlcpy(out, buf, (size_t) size);
+    } else {
+        vp_strlcpy(out, name, (size_t) size);
+    }
+    lib$find_file_end(&ctx);
+}
+
+int vpp_write_file(const char *name, const char *text, char *msg, int msgsize)
+{
+    FILE *f = fopen(name, "w");             /* a new version */
+    int ok;
+    if (!f) {
+        snprintf(msg, (size_t) msgsize, "can't create %s", name);
+        return 0;
+    }
+    ok = fputs(text, f) >= 0;
+    if (fclose(f) != 0) ok = 0;
+    if (!ok) { snprintf(msg, (size_t) msgsize, "can't write %s", name); return 0; }
+    found_name(name, msg, msgsize);
+    return 1;
 }

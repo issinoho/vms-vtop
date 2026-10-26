@@ -10,6 +10,9 @@
 #include "vp_model.h"
 #include "vp_graph.h"
 #include "vp_procs.h"
+#include "vp_opts.h"
+#include "vp_vms.h"
+#include "vp_app.h"
 
 static int checks, fails;
 #define CHECK(c) do { checks++; if (!(c)) { fails++; printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #c); } } while (0)
@@ -332,6 +335,65 @@ static void test_procs(void)
     vp_plist_free(&l);
 }
 
+static void test_opts(void)
+{
+    vp_opts o, back;
+    char err[120], text[1024];
+    int bad;
+    vp_opts_init(&o);
+    bad = vp_opts_parse(&o, "! comment\n# also\n\n  Graph = vt \r\nCOLOUR=mono\ninterval = 4\n"
+                        "sort = Mem\nreverse = yes\ntree=off\npanel = both\nnetwork = EWA0\n", err, sizeof err);
+    CHECK(bad == 0 && err[0] == '\0');
+    CHECK(o.graph == VP_G_VT && o.colour == VP_C_MONO && o.interval == 4 && o.sort == VP_S_MEM);
+    CHECK(o.reverse == 1 && o.tree == 0 && o.panel == VP_P_BOTH && !strcmp(o.network, "EWA0"));
+    /* bad lines are counted, the first named, the good ones still taken */
+    vp_opts_init(&o);
+    bad = vp_opts_parse(&o, "colr = 8\ninterval = 11\nsort = cpu\njunk\ntree = maybe", err, sizeof err);
+    CHECK(bad == 4 && !strcmp(err, "line 1: unknown option \"colr\"") && o.sort == VP_S_CPU);
+    CHECK(o.interval == -1 && o.tree == -1);
+    vp_opts_init(&o);
+    vp_opts_parse(&o, "interval = 1x", err, sizeof err);
+    CHECK(strstr(err, "bad value for interval") != 0);
+    /* format writes only what was given, and parses back the same */
+    vp_opts_init(&o);
+    o.interval = 3; o.sort = VP_S_IMAGE; o.panel = VP_P_AUTO;
+    CHECK(vp_opts_format(&o, text, sizeof text) > 0);
+    CHECK(strstr(text, "interval = 3\n") && strstr(text, "sort = image\n") && strstr(text, "panel = auto\n"));
+    CHECK(!strstr(text, "graph") && !strstr(text, "tree"));
+    vp_opts_init(&back);
+    CHECK(vp_opts_parse(&back, text, err, sizeof err) == 0);
+    CHECK(back.interval == 3 && back.sort == VP_S_IMAGE && back.panel == VP_P_AUTO && back.graph == -1);
+    o.graph = VP_G_BRAILLE; o.colour = VP_C_256; o.reverse = 0; o.tree = 1;
+    strcpy(o.network, "EWB0");
+    vp_opts_format(&o, text, sizeof text);
+    vp_opts_init(&back);
+    CHECK(vp_opts_parse(&back, text, err, sizeof err) == 0);
+    CHECK(back.graph == VP_G_BRAILLE && back.colour == VP_C_256 && back.reverse == 0
+          && back.tree == 1 && !strcmp(back.network, "EWB0"));
+    CHECK(vp_opts_format(&o, text, 20) == -1);
+}
+
+static void test_vms(void)
+{
+    static vp_vms v;
+    int idx[VP_MAX_QUEUE];
+    memset(&v, 0, sizeof v);
+    CHECK(!strcmp(vp_queue_state(VP_QS_IDLE), "idle") && !strcmp(vp_queue_state(VP_QS_BUSY), "busy"));
+    CHECK(!strcmp(vp_queue_state(VP_QS_STOPPED | VP_QS_IDLE), "stopped"));
+    CHECK(!strcmp(vp_queue_state(VP_QS_STALLED | VP_QS_BUSY), "stalled"));
+    CHECK(!strcmp(vp_queue_state(0), "-"));
+    CHECK(vp_queue_problem(VP_QS_PAUSED) && !vp_queue_problem(VP_QS_BUSY | VP_QS_STARTING));
+    CHECK(!strcmp(vp_queue_kind(VP_QK_GENERIC), "generic") && !strcmp(vp_queue_kind(9), "?"));
+    v.nqueue = 4;
+    strcpy(v.queue[0].name, "B_IDLE"); v.queue[0].status = VP_QS_IDLE;
+    strcpy(v.queue[1].name, "A_IDLE"); v.queue[1].status = VP_QS_IDLE;
+    strcpy(v.queue[2].name, "Z_JOBS"); v.queue[2].status = VP_QS_IDLE; v.queue[2].hold = 2; v.queue[2].timed = 1;
+    strcpy(v.queue[3].name, "Y_STALLED"); v.queue[3].status = VP_QS_STALLED;
+    CHECK(vp_queue_order(&v, idx) == 4);
+    CHECK(idx[0] == 3 && idx[1] == 2 && idx[2] == 1 && idx[3] == 0);
+    CHECK(vp_queue_jobs(&v) == 3);
+}
+
 int main(void)
 {
     test_format();
@@ -340,6 +402,8 @@ int main(void)
     test_model();
     test_graph();
     test_procs();
+    test_opts();
+    test_vms();
     printf("test_core: %d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
 }

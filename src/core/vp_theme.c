@@ -42,6 +42,7 @@ void vp_theme_init(vp_rgb pal[VP_NPAL])
     pal[VP_K_RX] = rgb(170, 120, 230);
     pal[VP_K_TX] = rgb(230, 120, 170);
     pal[VP_K_STATUS_BG] = rgb(40, 40, 50);
+    pal[VP_K_VMS_BOX] = rgb(80, 165, 170);
     gradient(&pal[VP_K_GRAD], rgb(80, 200, 90), rgb(225, 205, 60), rgb(230, 70, 60));
     gradient(&pal[VP_K_NETGRAD], rgb(80, 90, 200), rgb(160, 100, 220), rgb(230, 110, 170));
 }
