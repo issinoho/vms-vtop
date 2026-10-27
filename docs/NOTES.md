@@ -180,6 +180,10 @@ subprocess of its own (VPBUSY, `busy.com`, priority 1) keeping one CPU busy.
   now drops every newline that isn't the terminal's own `<LF>`.
 - DCL delta times want seconds below 60: `+0:0:70` is no time at all.
 
+`tests/vms/vt_keys.txt` (run by `test_shot.com`) takes the README's second picture the
+same way, at 80x24 in VT mode and 8 colours, as a VT525 shows it (2026-10-27). Its last
+step is `logout`, so PTYDRIVE's child ends by itself rather than being deleted.
+
 ## N13. The T0.1-0 kits installed on both nodes (2026-10-26, x86 and IA64)
 
 PRODUCT INSTALL (the user agreed: install on both, keep it installed) with

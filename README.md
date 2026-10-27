@@ -1,5 +1,6 @@
 <p align="center">
   <img src="docs/images/vtop.png" alt="VTOP on OpenVMS x86-64: a CPU graph in braille with per-CPU meters, memory and disk meters, a network graph, the vms panel with the queues, and the process list sorted by CPU" width="100%">
+  <br><sub>An xterm-type terminal at 132x40: braille graphs, 24-bit colour.</sub>
 </p>
 
 # vms-vtop
@@ -31,6 +32,12 @@ VMS compiler has, so VTOP is new C99 code that borrows btop's ideas. See
 It draws braille graphs in 24-bit colour on an xterm-type terminal, and DEC line
 drawing in 8 colours (or bold and reverse alone) on a VT or DECterm; it finds out which
 by asking the terminal. It uses the whole screen, 70 x 20 at least, and follows resizes.
+On a VT525 at 80 x 24 the same system looks like this, with fewer process columns and
+`v` to swap the net panel for the vms one:
+
+<p align="center">
+  <img src="docs/images/vtop-vt.png" alt="VTOP on a VT525 at 80 by 24: DEC line drawing, scan-line graphs and 8 colours" width="720">
+</p>
 
 ## Safety first
 

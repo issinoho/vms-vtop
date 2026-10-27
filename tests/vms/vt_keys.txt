@@ -1,0 +1,11 @@
+# PTYDRIVE script: an 80x24 screen in VT mode and 8 colours, as a VT525 shows it, for
+# the README's second picture (tools/vtshot.py --no-utf8 --step shot).
+# PTYDRIVE waits 30 s a step at most (longer is taken as 1.5 s), so the wait is two steps.
+2 symbol | vtop :== $'f$parse("[.build]vtop.exe")'\r
+2 size | set terminal/width=80/page=24\r
+2 busy | spawn/nowait/nolog/input=nl:/process=VPBUSY @[.tests.vms]busy 70\r
+1 start | vtop /graph=vt /colour=8 /interval=1\r
+30 fill | 
+15 shot | 
+2 quit | q
+2 logout | logout\r
