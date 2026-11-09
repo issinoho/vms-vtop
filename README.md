@@ -7,15 +7,15 @@
 
 [![Release](https://img.shields.io/github/v/release/issinoho/vms-vtop?label=release)](https://github.com/issinoho/vms-vtop/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/issinoho/vms-vtop/total?label=downloads)](https://github.com/issinoho/vms-vtop/releases)
-![OpenVMS](https://img.shields.io/badge/OpenVMS-IA64%20%7C%20x86--64-blue)
+![OpenVMS](https://img.shields.io/badge/OpenVMS-Alpha%20%7C%20IA64%20%7C%20x86--64-blue)
 [![License](https://img.shields.io/github/license/issinoho/vms-vtop)](LICENSE)
 
-A full-screen, live system monitor for OpenVMS x86-64 and IA64, inspired by
+A full-screen, live system monitor for OpenVMS x86-64, IA64 and Alpha, inspired by
 [btop](https://github.com/aristocratos/btop): CPU, memory, disk and network panels with
 history graphs, a process list you can sort, filter, view as a tree and act on, and a
 panel for what only VMS has: the cluster, shadow sets and queues.
 
-**Status: 0.1.0, an early test release.** Not a port: btop needs C++20, which neither
+**Status: 0.1.1, an early test release.** Not a port: btop needs C++20, which no
 VMS compiler has, so VTOP is new C99 code that borrows btop's ideas. See
 [docs/PLAN.md](docs/PLAN.md) for how it was built, phase by phase.
 
@@ -58,7 +58,7 @@ was seen to do in [docs/NOTES.md](docs/NOTES.md).
 From the [latest release](https://github.com/issinoho/vms-vtop/releases/latest):
 
 ```
-$ SET FILE/ATTRIBUTE=(RFM:FIX,LRL:8192,MRS:8192,RAT:NONE) ISSINOHO-*-VTOP-T0001-0-1.PCSI
+$ SET FILE/ATTRIBUTE=(RFM:FIX,LRL:8192,MRS:8192,RAT:NONE) ISSINOHO-*-VTOP-T0001-1-1.PCSI
 $ PRODUCT INSTALL VTOP /PRODUCER=ISSINOHO /SOURCE=dev:[dir]
 $ @VTOP$ROOT:[000000]VTOP$SETUP.COM
 $ VTOP
