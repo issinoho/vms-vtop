@@ -13,7 +13,11 @@ $ submit/hold/noprint/nolog/name=VPTEST_Q/queue=SYS$BATCH vptest_q.com
 $ entry = $entry
 $ write sys$output "==== held entry ", entry
 $ define/job vtop$options 'here'vptest.ini
-$ cc/standard=c99/pointer_size=32/prefix_library_entries=all_entries/include=[.tests.vms]/object=[.build]ptydrive.obj [.tests.vms]ptydrive.c
+$! Alpha's default is G_FLOAT; PTYDRIVE passes LIB$WAIT an IEEE single.
+$ ieee = ""
+$ if f$edit(f$getsyi("ARCH_NAME"), "UPCASE") .eqs. "ALPHA" then -
+      ieee = "/float=ieee_float/ieee_mode=denorm_results"
+$ cc'ieee'/standard=c99/pointer_size=32/prefix_library_entries=all_entries/include=[.tests.vms]/object=[.build]ptydrive.obj [.tests.vms]ptydrive.c
 $ link/executable=[.build]ptydrive.exe [.build]ptydrive.obj
 $ drive := $'f$parse("[.build]ptydrive.exe")'
 $ drive [.tests.vms]live5_keys.txt

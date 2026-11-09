@@ -73,11 +73,21 @@ dcl_logged() {
                 sftp_batch "cd $SFTPDIR" "get $tag.DONE $done_f" 2>/dev/null && break
                 # ssh ended with no marker. If the procedure left no log it never ran
                 # (seen on IA64, 2026-10-16: ssh gone in 2 s, only the .com there), so
-                # starting it again cannot run anything twice.
-                if [ "$starts" -lt 3 ] && ! sftp_batch "cd $SFTPDIR" "get $tag.LOG $out" 2>/dev/null; then
+                # starting it again cannot run anything twice. Test with ls, not get:
+                # a running procedure holds its log open and sftp cannot read it, which
+                # made a busy procedure look unstarted and ran it twice (Alpha,
+                # 2026-11-09: two .DONE versions for one tag).
+                if [ "$starts" -lt 3 ] && ! sftp_batch "cd $SFTPDIR" "ls $tag.LOG" 2>/dev/null; then
                     echo "vms.sh: $tag did not start; ssh said: $(tr -d '\r' < "$sshlog" | grep -avE '^ *Welcome to|^ *$' | head -2 | tr '\n' ' ')- starting it again" >&2
                     starts=$((starts + 1)); sleep 2; start_ssh; continue
                 fi
+                # It started and may still be running without its ssh session: wait
+                # for the marker until the time limit, polling every 10 s.
+                sftp_batch "cd $SFTPDIR" "ls $tag.LOG" >/dev/null 2>&1 || break
+                while [ "$waited" -lt "$limit" ]; do
+                    sftp_batch "cd $SFTPDIR" "get $tag.DONE $done_f" 2>/dev/null && break 2
+                    sleep 10; waited=$((waited + 10))
+                done
                 break
             fi
         fi

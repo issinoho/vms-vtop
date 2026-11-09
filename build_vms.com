@@ -10,6 +10,10 @@ $ if f$search("build.dir") .eqs. "" then create/directory [.build]
 $! Under /STANDARD=C99 only ANSI names get the DECC$ prefix: ALL_ENTRIES maps the rest.
 $ cflags = "/STANDARD=C99/POINTER_SIZE=32/PREFIX_LIBRARY_ENTRIES=ALL_ENTRIES" -
          + "/INCLUDE=([.src.core],[.src.plat])"
+$! Alpha's default is G_FLOAT; VTOP's doubles and LIB$WAIT's IEEE argument
+$! need IEEE (the default on IA64 and x86-64).
+$ if f$edit(f$getsyi("ARCH_NAME"), "UPCASE") .eqs. "ALPHA" then -
+      cflags = cflags + "/FLOAT=IEEE_FLOAT/IEEE_MODE=DENORM_RESULTS"
 $ core = "vp_util,vp_screen,vp_theme,vp_term,vp_model,vp_graph,vp_procs,vp_vms,vp_opts,vp_app"
 $ i = 0
 $ core_loop:

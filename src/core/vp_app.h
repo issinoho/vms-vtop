@@ -10,9 +10,9 @@
 #include "vp_opts.h"
 #include "vp_vms.h"
 
-#define VP_VERSION "0.1.0"
+#define VP_VERSION "0.1.1"
 /* PCSI version: T for an early test release */
-#define VP_PCSI_VERSION "T0.1-0"
+#define VP_PCSI_VERSION "T0.1-1"
 #define VP_MIN_ROWS 20
 #define VP_MIN_COLS 70
 #define VP_MIN_INTERVAL 1

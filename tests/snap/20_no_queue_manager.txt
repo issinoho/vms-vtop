@@ -41,4 +41,4 @@
 │ %JBC-E-NOQUEMGR, queue manager not running              ││                                                                       │
 │                                                         ││                                                                       │
 ╰─────────────────────────────────────────────────────────╯╰─ < > CPU% high  / filter  t tree  i info  S R D P act ────────────────╯
- q quit  h help  +- interval 2s  g graph BRAILLE  c colour 24  v net  b n network                                        VTOP 0.1.0
+ q quit  h help  +- interval 2s  g graph BRAILLE  c colour 24  v net  b n network                                        VTOP 0.1.1

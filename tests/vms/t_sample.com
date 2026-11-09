@@ -3,6 +3,11 @@ $ set noon
 $ here = f$parse(f$environment("PROCEDURE"),,,"DEVICE") + f$parse(f$environment("PROCEDURE"),,,"DIRECTORY")
 $ set default 'here'
 $ cflags = "/STANDARD=C99/POINTER_SIZE=32/PREFIX_LIBRARY_ENTRIES=ALL_ENTRIES/INCLUDE=([.src.core],[.src.plat])"
+$! Alpha's default is G_FLOAT; t_sample shares doubles with VP_PLAT_VMS (IEEE).
+$ ieee = ""
+$ if f$edit(f$getsyi("ARCH_NAME"), "UPCASE") .eqs. "ALPHA" then -
+      ieee = "/float=ieee_float/ieee_mode=denorm_results"
+$ cflags = cflags + ieee
 $ cc'cflags'/object=[.build]t_sample.obj [.tests.vms]t_sample.c
 $ set default [.build]
 $ link/executable=t_sample.exe t_sample.obj,vp_plat_vms.obj,vp_model.obj,vp_util.obj,vp_screen.obj,vp_term.obj,vp_theme.obj

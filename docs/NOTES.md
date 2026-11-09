@@ -195,3 +195,28 @@ command and the installed image says "VTOP 0.1.0". `inst_keys.txt` runs it on a
 pseudo-terminal: the screen, the vms panel, help, quit, back at DCL. PCSI notes that it
 cannot validate the unsigned kits, as for every family kit. No SYSTARTUP_VMS or SYLOGIN
 line was added.
+
+## N14. OpenVMS Alpha (2026-11-09, V8.4-2L2, VSI C 7.4-002)
+
+- **Memory read 0 free.** `rmi_u()` asked `$GETRMI` for `RMI$_FRLIST` and
+  `RMI$_MODLIST` as quadwords, as on IA64 and x86-64; Alpha returned nothing (vms-hass
+  NOTES 14). It now retries such an item as a longword when the quadword read fails or
+  gives 0. Afterwards VTOP shows 193M used, 3.8G free of 4.0G, as SHOW MEMORY does.
+- **Floating point.** Alpha's default is G_FLOAT. `build_vms.com` adds
+  `/FLOAT=IEEE_FLOAT/IEEE_MODE=DENORM_RESULTS` on Alpha (VTOP's doubles, LIB$WAIT's IEEE
+  type), and so do the test procedures that build PTYDRIVE and t_sample: PTYDRIVE passes
+  LIB$WAIT an IEEE single, and built with G_FLOAT it waited wrongly and typed the live
+  scripts far too fast (the first line was lost: `vvtop`, then `%DCL-W-IVVERB`).
+- **Keys.** SMG decodes arrow keys on Alpha as elsewhere (`probes/p_keys*.com`: one or
+  two `\e[C` in one write give SMG$K_TRM_RIGHT each). Typed in one write while VTOP is
+  busy redrawing on this slower machine, live5's two Rights reached VTOP split (`c`
+  changed the colour instead of the sort column). `live5_keys.txt` now sends them as
+  two steps, as a person would.
+- **Two copies of one test.** live5's files vanished mid-run and its options file came
+  out as `;2`: `tools/vms.sh` retried a procedure it thought had not started. A running
+  procedure holds its `/OUTPUT` log open, sftp could not `get` it, and the second copy's
+  start deleted the first copy's files (two `.DONE` versions for one tag). vms.sh now
+  tests the log with `ls` and, once it exists, waits for the marker.
+- With these, on the Alpha: `build_vms TEST` (144 + 78 checks) and the live tests (live,
+  live2, live4 with VPTEST1 suspended, resumed, re-prioritised and deleted, live5 with
+  the vms panel and the options file) pass as on IA64.

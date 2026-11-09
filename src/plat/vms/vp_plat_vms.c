@@ -471,7 +471,13 @@ static uint64_t rmi_u(int code, int size)
 {
     if (size == 8) {
         uint64_t v = 0;
-        return rmi(code, &v, 8) ? v : 0;
+        unsigned int w = 0;
+        if (rmi(code, &v, 8) && v != 0)
+            return v;
+        /* OpenVMS Alpha returns RMI$_FRLIST and RMI$_MODLIST as longwords and
+           refuses a quadword buffer, so free memory read 0 (vms-hass NOTES 14).
+           A list that really is empty reads 0 either way. */
+        return rmi(code, &w, 4) ? w : 0;
     } else {
         unsigned int w = 0;
         return rmi(code, &w, 4) ? w : 0;

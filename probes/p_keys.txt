@@ -1,0 +1,7 @@
+2 symbol | pk :== $'f$parse("[.build]p_keys.exe")'\r
+3 run | pk\r
+2 right1 | \e[C
+2 right2 | \e[C
+2 left | \e[D
+2 letter | x
+4 last | y

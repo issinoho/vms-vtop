@@ -7,7 +7,8 @@
 2 net | v
 3 vms2 | v
 # sort by Mem (Right x2 from CPU%), tree, then save: a new VPTEST.INI
-1 sort | \e[C\e[C
+2 sort | \e[C
+2 sort2 | \e[C
 1 tree | t
 3 saved | w
 2 quit1 | q
